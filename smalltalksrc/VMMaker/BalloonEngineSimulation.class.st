@@ -466,15 +466,23 @@ BalloonEngineSimulation >> stepToFirstBezierIn: bezier at: yValue [
 	<inline: false>
 	<var: #updateData type: 'int *'>
 	| updateData deltaY maxSteps scaledStepSize squaredStepSize startX startY viaX viaY endX endY fwX1 fwX2 fwY1 fwY2 fwDx fwDDx fwDy fwDDy |
-	((self isWide: bezier) not and: [ yValue >= (self bezierEndYOf: bezier) ])
-		ifTrue: [ ^ self edgeNumLinesOf: bezier put: 0 ].	"Do a quick check if there is anything at all to do"	"Now really initialize bezier"
+	((self isWide: bezier) not
+		and: [ yValue >= (self bezierEndYOf: bezier) ])
+		ifTrue: [ ^ self edgeNumLinesOf: bezier put: 0 ].
+
+
+	"Do a quick check if there is anything at all to do"
+
+	"Now really initialize bezier"
 	startX := self edgeXValueOf: bezier.
 	startY := self edgeYValueOf: bezier.
 	viaX := self bezierViaXOf: bezier.
 	viaY := self bezierViaYOf: bezier.
 	endX := self bezierEndXOf: bezier.
 	endY := self bezierEndYOf: bezier.
-	deltaY := endY - startY.	"Initialize integer forward differencing"
+	deltaY := endY - startY.
+
+	"Initialize integer forward differencing"
 	fwX1 := (viaX - startX) * 2.
 	fwX2 := startX + endX - (viaX * 2).
 	fwY1 := (viaY - startY) * 2.
@@ -489,7 +497,9 @@ BalloonEngineSimulation >> stepToFirstBezierIn: bezier at: yValue [
 	fwDx := fwDx + (fwDDx // 2).
 	fwDy := fwY1 * scaledStepSize.
 	fwDDy := fwY2 * squaredStepSize * 2.
-	fwDy := fwDy + (fwDDy // 2).	"Store the values"
+	fwDy := fwDy + (fwDDy // 2).
+
+	"Store the values"
 	self edgeNumLinesOf: bezier put: deltaY.
 	updateData := self bezierUpdateDataOf: bezier.
 	updateData at: GBUpdateX put: (startX * 256) asC_int.
@@ -497,10 +507,12 @@ BalloonEngineSimulation >> stepToFirstBezierIn: bezier at: yValue [
 	updateData at: GBUpdateDX put: fwDx asC_int.
 	updateData at: GBUpdateDY put: fwDy asC_int.
 	updateData at: GBUpdateDDX put: fwDDx asC_int.
-	updateData at: GBUpdateDDY put: fwDDy asC_int.	"And step to the first scan line"
+	updateData at: GBUpdateDDY put: fwDDy asC_int.
+
+	"And step to the first scan line"
 	(startY := self edgeYValueOf: bezier) = yValue
-		ifFalse: [ 
-			self stepToNextBezierIn: bezier at: yValue.	"Adjust number of lines remaining"
+		ifFalse: [ self stepToNextBezierIn: bezier at: yValue.
+			"Adjust number of lines remaining"
 			self edgeNumLinesOf: bezier put: deltaY - (yValue - startY) ]
 ]
 
@@ -517,13 +529,13 @@ BalloonEngineSimulation >> stepToNextBezierForward: updateData at: yValue [
 	lastY := updateData at: GBUpdateY.
 	fwDx := updateData at: GBUpdateDX.
 	fwDy := updateData at: GBUpdateDY.
-	minY := yValue * 256.	"Step as long as we haven't yet reached minY and also
+	minY := yValue * 256.
+	"Step as long as we haven't yet reached minY and also
 	as long as fwDy is greater than zero thus stepping down.
 	Note: The test for fwDy should not be necessary in theory
 		but is a good insurance in practice."
 	[ minY > lastY and: [ fwDy >= 0 ] ]
-		whileTrue: [ 
-			lastX := lastX + (fwDx + 16r8000 signedBitShift: -16).
+		whileTrue: [ lastX := lastX + (fwDx + 16r8000 signedBitShift: -16).
 			lastY := lastY + (fwDy + 16r8000 signedBitShift: -16).
 			fwDx := fwDx + (updateData at: GBUpdateDDX).
 			fwDy := fwDy + (updateData at: GBUpdateDDY) ].

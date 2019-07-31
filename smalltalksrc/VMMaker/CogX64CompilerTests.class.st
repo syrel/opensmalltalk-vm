@@ -33,19 +33,8 @@ CogX64CompilerTests >> methodLabel [
 { #category : #accessing }
 CogX64CompilerTests >> processor [
 	processor ifNil:
-		[processor := BochsX64Alien new].
+		[processor := CogSimulationProcessor x8664].
 	^processor
-]
-
-{ #category : #accessing }
-CogX64CompilerTests >> strip: aFancyDisassembledInstruction [
-	"Convert e.g. '00000000: movl %rax, 0x2(%rax) : 89 40 02' to  'movl %rax, 0x2(%rax)'"
-	^((((aFancyDisassembledInstruction
-		copyReplaceAll: '%ds:' with: '')
-			copyReplaceAll: '%ss:' with: '')
-				allButFirst: (aFancyDisassembledInstruction indexOf: $:) + 1)
-					copyUpTo: $:)
-						allButLast: 1
 ]
 
 { #category : #tests }
@@ -63,7 +52,7 @@ CogX64CompilerTests >> testAddCqR [
 				into: [:str :sz| | plainJane herIntended |
 					"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 					plainJane := self strip: str.
-					herIntended := 'addq $0x', (const printStringBase: 16 length: 16 padded: true), ', ', regname.
+					herIntended := 'addq',self opcodeSeparator, '$0x', (self formatConstant: const), ', ', regname.
 					self assert: herIntended equals: plainJane.
 					self assert: len = sz]]]
 ]
@@ -83,7 +72,7 @@ CogX64CompilerTests >> testAndCqR [
 				into: [:str :sz| | plainJane herIntended |
 					"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 					plainJane := self strip: str.
-					herIntended := 'andq $0x', (const printStringBase: 16 length: 16 padded: true), ', ', regname.
+					herIntended := 'andq', self opcodeSeparator, '$0x', (self formatConstant: const), ', ', regname.
 					self assert: herIntended equals: plainJane.
 					self assert: len = sz]]]
 ]
@@ -103,7 +92,7 @@ CogX64CompilerTests >> testAndRR [
 				into: [:str :sz| | plainJane herIntended |
 					"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 					plainJane := self strip: str.
-					herIntended := 'andq ', sregname, ', ', dregname.
+					herIntended := 'andq',self opcodeSeparator, sregname, ', ', dregname.
 					self assert: herIntended equals: plainJane.
 					self assert: len = sz]]]
 ]
@@ -143,7 +132,7 @@ CogX64CompilerTests >> testCMPXCHGAwR [
 				into: [:str :sz| | plainJane herIntended |
 					"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 					plainJane := self strip: str.
-					herIntended := 'cmpxchgl ', regname, ', 0x', (addr hex allButFirst: 3).
+					herIntended := 'cmpxchgl',self opcodeSeparator , regname, ', 0x', (addr hex allButFirst: 3).
 					self assert: herIntended equals: plainJane.
 					self assert: len = sz]]]
 ]
@@ -172,7 +161,7 @@ CogX64CompilerTests >> testCMPXCHGMwrR [
 						into: [:str :sz| | plainJane herIntended |
 							plainJane := self strip: str.
 							herIntended := (prefixLock ifTrue: ['lock '] ifFalse: ['']),
-											'cmpxchgl ', drname, ', 0x', (offset hex allButFirst: 3), '(', srname, ')'.
+											'cmpxchgl',self opcodeSeparator, drname, ', 0x', (offset hex allButFirst: 3), '(', srname, ')'.
 							self assert: herIntended equals: plainJane.
 							self assert: memory size = sz]]]]]
 ]
@@ -190,7 +179,7 @@ CogX64CompilerTests >> testCallR [
 				into: [:str :sz| | plainJane herIntended |
 					"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 					plainJane := self strip: str.
-					herIntended := 'call ', regname.
+					herIntended := 'call',self opcodeSeparator, regname.
 					self assert: herIntended equals: plainJane.
 					self assert: len = sz]]
 ]
@@ -210,7 +199,7 @@ CogX64CompilerTests >> testCmpC32R [
 				into: [:str :sz| | plainJane herIntended |
 					"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 					plainJane := self strip: str.
-					herIntended := 'cmpl $0x', (const printStringBase: 16 length: 8 padded: true), ', ', regname.
+					herIntended := 'cmpl',self opcodeSeparator, '$0x', (self formatConstant: const), ', ', regname.
 					self assert: herIntended equals: plainJane.
 					self assert: len = sz]]]
 ]
@@ -230,7 +219,7 @@ CogX64CompilerTests >> testCmpCqR [
 				into: [:str :sz| | plainJane herIntended |
 					"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 					plainJane := self strip: str.
-					herIntended := 'cmpq $0x', (const printStringBase: 16 length: 16 padded: true), ', ', regname.
+					herIntended := 'cmpq',self opcodeSeparator, '$0x', (self formatConstant: const), ', ', regname.
 					self assert: herIntended equals: plainJane.
 					self assert: len = sz]]]
 ]
@@ -252,6 +241,7 @@ CogX64CompilerTests >> testDivQuoRem [
 	map := Dictionary new.
 	compiler := self gen: nil.
 	memory := ByteArray new: 4096 * 2.
+	self processor mapHostMemory: memory readExecuteOnlyBelow: memory size / 2.
 	ops := Set new.
 	self concreteCompilerClass dataRegistersWithAccessorsExcept: #(rbp rsp) do:
 		[:sreg :srget :srset|
@@ -267,7 +257,10 @@ CogX64CompilerTests >> testDivQuoRem [
 					ops add: op.
 					compiler genDivR: sreg R: dreg Quo: qreg Rem: rreg.
 					instructions := self generateInstructions.
-					memory atAllPut: 0; replaceFrom: 1 to: instructions size with: instructions startingAt: 1; at: instructions size + 1 put: self processor nopOpcode.
+					self processor
+						memoryAtAllPut: 0;
+						doMemorySetFrom: 1 to: instructions size with: instructions;
+						memoryAt: instructions size + 1 put: self processor nopOpcode.
 					#(-768 -456 -123 123 456 789)
 						with: #(987 654 321 -321 -654 -987)
 						do: [:dd :dv| "| calc mask |
@@ -288,10 +281,8 @@ CogX64CompilerTests >> testDivQuoRem [
 								at: srget put: (self processor perform: srset with: (self processor convertIntegerToInternal: dv));
 								at: drget put: (self processor perform: drset with: (self processor convertIntegerToInternal: dd)).
 							self processor rsp: memory size; rip: 0.
-							self shouldnt:
-								[[self processor pc < instructions size] whileTrue:
-									[self processor singleStepIn: memory readExecuteOnlyBelow: memory size / 2]]
-								raise: Error.
+							[self processor pc < instructions size] whileTrue:
+									[self processor singleStep].
 							map
 								at: qrget put: (self processor convertIntegerToInternal: (dd quo: dv));
 								at: rrget put: (self processor convertIntegerToInternal: (dd rem: dv)).
@@ -314,7 +305,7 @@ CogX64CompilerTests >> testJumpR [
 				into: [:str :sz| | plainJane herIntended |
 					"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 					plainJane := self strip: str.
-					herIntended := 'jmp ', regname.
+					herIntended := 'jmp', self opcodeSeparator, regname.
 					self assert: herIntended equals: plainJane.
 					self assert: len = sz]]
 ]
@@ -336,7 +327,7 @@ CogX64CompilerTests >> testMoveAbR [
 					In: inst machineCode object
 					into: [:str :sz| | plainJane herIntended |
 						plainJane := self strip: str.
-						herIntended := 'xchgq %rax, %', reg64name.
+						herIntended := 'xchgq',self opcodeSeparator, '%rax, %', reg64name.
 						self assert: herIntended equals: plainJane.
 						totalsz := sz]].
 			self processor
@@ -344,7 +335,7 @@ CogX64CompilerTests >> testMoveAbR [
 				In: inst machineCode object
 				into: [:str :sz| | plainJane herIntended |
 					plainJane := self strip: str.
-					herIntended := 'movb 0x', (addr printStringBase: 16 length: 16 padded: true), ', %al'.
+					herIntended := self movByteOperationString, ' 0x', (self formatConstant: addr), ', %al'.
 					self assert: herIntended equals: plainJane.
 					totalsz := totalsz + sz].
 			regname ~= '%al' ifTrue:
@@ -373,27 +364,29 @@ CogX64CompilerTests >> testMoveAwR [
 				[self processor
 					disassembleInstructionAt: 0
 					In: inst machineCode object
-					into: [:str :sz| | plainJane herIntended |
+					into: [:str :sz| | plainJane herIntended1 herIntended2 |
 						plainJane := self strip: str.
-						herIntended := 'xchgq %rax, ', regname.
-						self assert: herIntended equals: plainJane.
+						herIntended1 := 'xchgq', self opcodeSeparator, '%rax, ', regname.
+						herIntended2 := 'xchgq', self opcodeSeparator, regname, ', %rax'.
+						self assert: (plainJane = herIntended1 or: [plainJane = herIntended2]).
 						totalsz := sz]].
 			self processor
 				disassembleInstructionAt: totalsz
 				In: inst machineCode object
 				into: [:str :sz| | plainJane herIntended |
 					plainJane := self strip: str.
-					herIntended := 'movq 0x', (addr printStringBase: 16 length: 16 padded: true), ', %rax'.
+					herIntended := self movQuadWordOperationString,self opcodeSeparator, '0x', (self formatConstant: addr), ', %rax'.
 					self assert: herIntended equals: plainJane.
 					totalsz := totalsz + sz].
 			regname ~= '%rax' ifTrue:
 				[self processor
 					disassembleInstructionAt: totalsz
 					In: inst machineCode object
-					into: [:str :sz| | plainJane herIntended |
+					into: [:str :sz| | plainJane herIntended1 herIntended2 |
 						plainJane := self strip: str.
-						herIntended := 'xchgq %rax, ', regname.
-						self assert: herIntended equals: plainJane.
+						herIntended1 := 'xchgq',self opcodeSeparator, regname, ', %rax'.
+						herIntended2 := 'xchgq',self opcodeSeparator, '%rax, ', regname.
+						self assert: (plainJane = herIntended1 or: [ plainJane = herIntended2 ]).
 						totalsz := totalsz + sz]].
 			self assert: len = totalsz]]
 ]
@@ -413,7 +406,7 @@ CogX64CompilerTests >> testMoveC32R [
 				into: [:str :sz| | plainJane herIntended po |
 					plainJane := self strip: str.
 					po := offset bitAnd: 1 << self processor bitsInWord - 1.
-					herIntended := 'movq $0x', (po printStringBase: 16 length: 16 padded: true), ', ', rname.
+					herIntended := 'movq', self opcodeSeparator, '$', (self formatOffset: po), ', ', rname.
 					self assert: herIntended equals: plainJane.
 					self assert: len = sz]]]
 ]
@@ -436,7 +429,7 @@ CogX64CompilerTests >> testMoveM16rR [
 					into: [:str :sz| | plainJane herIntended po |
 						po := offset bitAnd: 1 << self processor bitsInWord - 1.
 						plainJane := self strip: str.
-						herIntended := 'movzwq ', (offset = 0 ifTrue: [''] ifFalse: ['0x', (po printStringBase: 16 length: 16 padded: true)]), '(', srname, '), ', drname.
+						herIntended := 'movzwq',self opcodeSeparator, (offset = 0 ifTrue: [''] ifFalse: ['0x', (self formatConstant: po)]), '(', srname, '), ', drname.
 						self assert: herIntended equals: plainJane.
 						self assert: len = sz]]]]
 ]
@@ -457,16 +450,16 @@ CogX64CompilerTests >> testMoveM64rRd [
 					In: inst machineCode object
 					into: [:str :sz| | plainJane herIntended |
 						plainJane := self strip: str.
-						herIntended := 'movq ',
+						herIntended := 'movq', self opcodeSeparator,
 										(offset = 0
 											ifTrue: ['']
-											ifFalse: ['0x', ((offset printStringBase: 16 length: 16 padded: true) asLowercase)]),
+											ifFalse: [ '0x', (self formatConstant: offset) ]),
 										'(', srname, '), ', drname.
 						"N.B. bochs 2.3.7 gets many cases wrong, e.g.
 							movq %ds:(%rax), %xmm8 : F3 44 0F 7E 00
 						 is disassembled as
 							rep movq %ds:(%rax), %xmm8 : F3 44 0F 7E 00"
-						(plainJane beginsWith: 'rep ') ifTrue:
+						(plainJane beginsWith: 'rep', self opcodeSeparator) ifTrue:
 							[plainJane := plainJane allButFirst: 4].
 						self assert: herIntended equals: plainJane.
 						self assert: len = sz]]]]
@@ -517,7 +510,7 @@ CogX64CompilerTests >> testMoveMbrR [
 					into: [:str :sz| | plainJane herIntended po |
 						po := offset bitAnd: 1 << self processor bitsInWord - 1.
 						plainJane := self strip: str.
-						herIntended := 'movb ', (offset = 0 ifTrue: [''] ifFalse: ['0x', (po printStringBase: 16 length: 16 padded: true)]), '(', srname, '), ', drname.
+						herIntended := 'movb', self opcodeSeparator, (offset = 0 ifTrue: [''] ifFalse: ['0x', (self formatConstant: po)]), '(', srname, '), ', drname.
 						self assert: herIntended equals: plainJane.
 						self assert: len = sz]]]]
 ]
@@ -539,7 +532,7 @@ CogX64CompilerTests >> testMoveMwrR [
 					into: [:str :sz| | plainJane herIntended po |
 						plainJane := self strip: str.
 						po := offset bitAnd: 1 << self processor bitsInWord - 1.
-						herIntended := 'movq ', (offset = 0 ifTrue: [''] ifFalse: ['0x', (po printStringBase: 16 length: 16 padded: true)]), '(', srname, '), ', drname.
+						herIntended := 'movq', self opcodeSeparator, (offset = 0 ifTrue: [''] ifFalse: [ self formatOffset: po]), '(', srname, '), ', drname.
 						self assert: herIntended equals: plainJane.
 						self assert: len = sz]]]]
 
@@ -580,27 +573,29 @@ CogX64CompilerTests >> testMoveRAb [
 				[self processor
 					disassembleInstructionAt: 0
 					In: inst machineCode object
-					into: [:str :sz| | plainJane herIntended |
+					into: [:str :sz| | plainJane herIntended1 herIntended2 |
 						plainJane := self strip: str.
-						herIntended := 'xchgq %rax, %', reg64name.
-						self assert: herIntended equals: plainJane.
+						herIntended1 := 'xchgq', self opcodeSeparator, '%rax, %', reg64name.
+						herIntended2 := 'xchgq', self opcodeSeparator, '%', reg64name, ', %rax'.
+						self assert: (plainJane = herIntended1 or: [plainJane = herIntended2]).
 						totalsz := sz]].
 			self processor
 				disassembleInstructionAt: totalsz
 				In: inst machineCode object
 				into: [:str :sz| | plainJane herIntended |
 					plainJane := self strip: str.
-					herIntended := 'movb %al, 0x', (addr printStringBase: 16 length: 16 padded: true).
+					herIntended := self movByteOperationString, self opcodeSeparator, '%al, 0x', (self formatConstant: addr).
 					self assert: herIntended equals: plainJane.
 					totalsz := totalsz + sz].
 			regname ~= '%al' ifTrue:
 				[self processor
 					disassembleInstructionAt: totalsz
 					In: inst machineCode object
-					into: [:str :sz| | plainJane herIntended |
+					into: [:str :sz| | plainJane herIntended1 herIntended2 |
 						plainJane := self strip: str.
-						herIntended := 'xchgq %rax, %', reg64name.
-						self assert: herIntended equals: plainJane.
+						herIntended1 := 'xchgq', self opcodeSeparator, '%rax, %', reg64name.
+						herIntended2 := 'xchgq', self opcodeSeparator, '%', reg64name, ', %rax'.
+						self assert: (plainJane = herIntended1 or: [plainJane = herIntended2]).
 						totalsz := totalsz + sz]].
 			self assert: len = totalsz]]
 ]
@@ -619,27 +614,29 @@ CogX64CompilerTests >> testMoveRAw [
 				[self processor
 					disassembleInstructionAt: 0
 					In: inst machineCode object
-					into: [:str :sz| | plainJane herIntended |
+					into: [:str :sz| | plainJane herIntended1 herIntended2 |
 						plainJane := self strip: str.
-						herIntended := 'xchgq %rax, ', regname.
-						self assert: herIntended equals: plainJane.
+						herIntended1 := 'xchgq', self opcodeSeparator, '%rax, ', regname.
+						herIntended2 := 'xchgq', self opcodeSeparator, regname, ', %rax'.
+						self assert: (plainJane = herIntended1 or: [plainJane = herIntended2]).
 						totalsz := sz]].
 			self processor
 				disassembleInstructionAt: totalsz
 				In: inst machineCode object
 				into: [:str :sz| | plainJane herIntended |
 					plainJane := self strip: str.
-					herIntended := 'movq %rax, 0x', (addr printStringBase: 16 length: 16 padded: true).
+					herIntended := self movQuadWordOperationString, self opcodeSeparator,'%rax, 0x', (self formatConstant: addr).
 					self assert: herIntended equals: plainJane.
 					totalsz := totalsz + sz].
 			regname ~= '%rax' ifTrue:
 				[self processor
 					disassembleInstructionAt: totalsz
 					In: inst machineCode object
-					into: [:str :sz| | plainJane herIntended |
+					into: [:str :sz| | plainJane herIntended1 herIntended2 |
 						plainJane := self strip: str.
-						herIntended := 'xchgq %rax, ', regname.
-						self assert: herIntended equals: plainJane.
+						herIntended1 := 'xchgq', self opcodeSeparator, '%rax, ', regname.
+						herIntended2 := 'xchgq', self opcodeSeparator, regname, ', %rax'.
+						self assert: (plainJane = herIntended1 or: [plainJane = herIntended2]).
 						totalsz := totalsz + sz]].
 			self assert: len = totalsz]]
 ]
@@ -690,7 +687,7 @@ CogX64CompilerTests >> testMoveRM16r [
 					into: [:str :sz| | plainJane herIntended po |
 						plainJane := self strip: str.
 						po := offset bitAnd: 1 << self processor bitsInWord - 1.
-						herIntended := 'movw ', srname, (offset = 0 ifTrue: [', '] ifFalse: [', 0x', (po printStringBase: 16 length: 16 padded: true)]), '(', drname, ')'.
+						herIntended := 'movw', self opcodeSeparator, srname, (offset = 0 ifTrue: [', '] ifFalse: [', ', (self formatOffset: po)]), '(', drname, ')'.
 						self assert: herIntended equals: plainJane.
 						self assert: len = sz]]]]
 ]
@@ -712,7 +709,7 @@ CogX64CompilerTests >> testMoveRMbr [
 					into: [:str :sz| | plainJane herIntended po |
 						plainJane := self strip: str.
 						po := offset bitAnd: 1 << self processor bitsInWord - 1.
-						herIntended := 'movb ', srname, (offset = 0 ifTrue: [', '] ifFalse: [', 0x', (po printStringBase: 16 length: 16 padded: true)]), '(', drname, ')'.
+						herIntended := 'movb', self opcodeSeparator, srname, (offset = 0 ifTrue: [', '] ifFalse: [', ', (self formatOffset: po)]), '(', drname, ')'.
 						self assert: herIntended equals: plainJane.
 						self assert: len = sz]]]]
 ]
@@ -735,7 +732,7 @@ CogX64CompilerTests >> testMoveRMwr [
 						"Convert e.g. '00000000: movq %rax, 0x2(%rax) : 48 89 40 02' to  'movl %rax, 0x2(%rax)'"
 						plainJane := self strip: str.
 						po := offset bitAnd: 1 << self processor bitsInWord - 1.
-						herIntended := 'movq ', srname, ', ', (offset = 0 ifTrue: [''] ifFalse: ['0x', (po printStringBase: 16 length: 16 padded: true)]), '(',drname,')'.
+						herIntended := 'movq', self opcodeSeparator, srname, ', ', (offset = 0 ifTrue: [''] ifFalse: [(self formatOffset: po)]), '(',drname,')'.
 						self assert: herIntended equals: plainJane.
 						self assert: len = sz]]]]
 
@@ -775,12 +772,12 @@ CogX64CompilerTests >> testMoveRRd [
 				In: inst machineCode object
 				into: [:str :sz| | plainJane herIntended |
 					plainJane := self strip: str.
-					herIntended := 'movq ', srname, ', ', drname.
+					herIntended := 'movq', self opcodeSeparator, srname, ', ', drname.
 					"N.B. bochs 2.3.7 gets many cases wrong, e.g.
 						movq %ds:(%rax), %xmm8 : F3 44 0F 7E 00
 					 is disassembled as
 						rep movq %ds:(%rax), %xmm8 : F3 44 0F 7E 00"
-					(plainJane beginsWith: 'rep ') ifTrue:
+					(plainJane beginsWith: 'rep', self opcodeSeparator) ifTrue:
 						[plainJane := plainJane allButFirst: 4].
 					self assert: herIntended equals: plainJane.
 					self assert: len = sz]]]
@@ -831,7 +828,7 @@ CogX64CompilerTests >> testMoveRX32rR [
 							into: [:str :sz| | plainJane herIntended |
 								"Convert e.g. '00000000: movl %rax, 0x2(%rax) : 89 40 02' to  'movl %rax, 0x2(%rax)'"
 								plainJane := self strip: str.
-								herIntended := 'movl ', srname, ', (', brname, ',', irname, ',4)'.
+								herIntended := 'movl', self opcodeSeparator, srname, ', (', brname, ',', irname, ',4)'.
 								self assert: herIntended equals: plainJane.
 								self assert: len = sz]]]]]
 ]
@@ -853,7 +850,7 @@ CogX64CompilerTests >> testMoveRXbrR [
 						In: inst machineCode object
 						into: [:str :sz| | plainJane herIntended |
 							plainJane := self strip: str.
-							herIntended := 'movb ', srname, ', (', brname, ',', irname, ',1)'.
+							herIntended := 'movb', self opcodeSeparator, srname, ', (', brname, ',', irname, self memoryShiftFactorArgument ,')'.
 							self assert: herIntended equals: plainJane.
 							self assert: len = sz]]]]]
 ]
@@ -876,7 +873,7 @@ CogX64CompilerTests >> testMoveRXwrR [
 							into: [:str :sz| | plainJane herIntended |
 								"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 								plainJane := self strip: str.
-								herIntended := 'movq ', srname, ', (', brname, ',', irname, ',8)'.
+								herIntended := 'movq', self opcodeSeparator, srname, ', (', brname, ',', irname, ',8)'.
 								self assert: herIntended equals: plainJane.
 								self assert: len = sz]]]]]
 ]
@@ -897,10 +894,10 @@ CogX64CompilerTests >> testMoveRdM64r [
 					In: inst machineCode object
 					into: [:str :sz| | plainJane herIntended |
 						plainJane := self strip: str.
-						herIntended := 'movq ', srname,
+						herIntended := 'movq', self opcodeSeparator, srname,
 											(offset = 0
 												ifTrue: [', ']
-												ifFalse: [', 0x', ((offset printStringBase: 16 length: 16 padded: true))]),
+												ifFalse: [', 0x', (self formatConstant:offset )]),
 											'(', drname, ')'.
 						self assert: herIntended equals: plainJane.
 						self assert: len = sz]]]]
@@ -947,12 +944,12 @@ CogX64CompilerTests >> testMoveRdR [
 				In: inst machineCode object
 				into: [:str :sz| | plainJane herIntended |
 					plainJane := self strip: str.
-					herIntended := 'movq ', srname, ', ', drname.
+					herIntended := 'movq', self opcodeSeparator, srname, ', ', drname.
 					"N.B. bochs 2.3.7 gets many cases wrong, e.g.
 						movq %ds:(%rax), %xmm8 : F3 44 0F 7E 00
 					 is disassembled as
 						rep movq %ds:(%rax), %xmm8 : F3 44 0F 7E 00"
-					(plainJane beginsWith: 'rep ') ifTrue:
+					(plainJane beginsWith: 'rep', self opcodeSeparator) ifTrue:
 						[plainJane := plainJane allButFirst: 4].
 					self assert: herIntended equals: plainJane.
 					self assert: len = sz]]]
@@ -1003,7 +1000,7 @@ CogX64CompilerTests >> testMoveX32rRR [
 							into: [:str :sz| | plainJane herIntended |
 								"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 								plainJane := self strip: str.
-								herIntended := 'movl (', brname, ',', irname, ',4), ',drname.
+								herIntended := 'movl', self opcodeSeparator, '(', brname, ',', irname, ',4), ',drname.
 								self assert: herIntended equals: plainJane.
 								self assert: len - 3 = sz]]]]]
 ]
@@ -1027,7 +1024,7 @@ CogX64CompilerTests >> testMoveXbrRR [
 						into: [:str :sz| | plainJane herIntended |
 							"Convert e.g. '00000000: movzbq %ds:(%rax,%rax,1), %rax : 48 0F B6 04 00 ' to  'movzbq (%rax,%rax,1), %rax'"
 							plainJane := self strip: str.
-							herIntended := 'movb (', brname, ',', irname, ',1), ',drname.
+							herIntended := 'movb', self opcodeSeparator, '(', brname, ',', irname, self memoryShiftFactorArgument,'), ',drname.
 							self assert: herIntended equals: plainJane.
 							self assert: len = sz]]]]]
 ]
@@ -1050,7 +1047,7 @@ CogX64CompilerTests >> testMoveXwrRR [
 							into: [:str :sz| | plainJane herIntended |
 								"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 								plainJane := self strip: str.
-								herIntended := 'movq (', brname, ',', irname, ',8), ',drname.
+								herIntended := 'movq', self opcodeSeparator,'(', brname, ',', irname, ',8), ',drname.
 								self assert: herIntended equals: plainJane.
 								self assert: len = sz]]]]]
 ]
@@ -1086,10 +1083,8 @@ CogX64CompilerTests >> testMul [
 								at: srget put: (self processor perform: srset with: (self processor convertIntegerToInternal: b));
 								at: drget put: (self processor perform: drset with: (self processor convertIntegerToInternal: a)).
 					self processor rsp: memory size; rip: 0.
-					self shouldnt:
-						[[self processor pc < instructions size] whileTrue:
-							[self processor singleStepIn: memory]]
-						raise: Error.
+					[self processor pc < instructions size] whileTrue:
+							[self processor singleStepIn: memory].
 					map at: drget put: (self processor convertIntegerToInternal: (a * b)).
 					map keysAndValuesDo:
 						[:accessor :value|
@@ -1111,7 +1106,7 @@ CogX64CompilerTests >> testOrCqR [
 				into: [:str :sz| | plainJane herIntended |
 					"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 					plainJane := self strip: str.
-					herIntended := 'orq $0x', (const printStringBase: 16 length: 16 padded: true), ', ', regname.
+					herIntended := 'orq', self opcodeSeparator, '$0x', (self formatConstant: const), ', ', regname.
 					self assert: herIntended equals: plainJane.
 					self assert: len = sz]]]
 ]
@@ -1134,9 +1129,9 @@ CogX64CompilerTests >> testShiftCqR [
 						into: [:str :sz| | plainJane herIntended |
 							"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 							plainJane := self strip: str.
-							herIntended := opname ,' $', (shift > 1
-														ifTrue: ['0x', (shift printStringBase: 16 length: 2 padded: true)]
-														ifFalse: [shift asInteger]), ', ', regname.
+							herIntended := opname , self opcodeSeparator, (shift > 1
+														ifTrue: [ '$', (self formatOffset: shift) ,', ']
+														ifFalse: [ '' ]), regname.
 							self assert: herIntended equals: plainJane.
 							self assert: len = sz]]]]
 ]
@@ -1156,7 +1151,7 @@ CogX64CompilerTests >> testSubCqR [
 				into: [:str :sz| | plainJane herIntended |
 					"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 					plainJane := self strip: str.
-					herIntended := 'subq $0x', (const printStringBase: 16 length: 16 padded: true), ', ', regname.
+					herIntended := 'subq', self opcodeSeparator,'$0x', (self formatConstant: const), ', ', regname.
 					self assert: herIntended equals: plainJane.
 					self assert: len = sz]]]
 ]
@@ -1176,18 +1171,18 @@ CogX64CompilerTests >> testTstCqR [
 					 regname := reg < 8
 									ifTrue: [#('%al' '%cl' '%dl' '%bl' '%spl' '%bpl' '%sil' '%dil') at: reg + 1]
 									ifFalse: [theRegname, 'b'].
-					 constString := const printStringBase: 16 length: 2 padded: true]
+					 constString := self formatConstant: const ]
 				ifFalse:
 					[op := 'testq'.
 					 regname := theRegname.
-					 constString := const printStringBase: 16 length: 16 padded: true].
+					 constString := self formatConstant: const ].
 			self processor
 				disassembleInstructionAt: 0
 				In: inst machineCode object
 				into: [:str :sz| | plainJane herIntended |
 					"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 					plainJane := self strip: str.
-					herIntended := op, ' $0x', constString, ', ', regname.
+					herIntended := op, self opcodeSeparator, '$0x', constString, ', ', regname.
 					self assert: herIntended equals: plainJane.
 					self assert: len = sz]]]
 ]
@@ -1252,12 +1247,14 @@ CogX64CompilerTests >> testXCHGRR [
 			self processor
 				disassembleInstructionAt: 0
 				In: inst machineCode object
-				into: [:str :sz| | plainJane herIntended |
+				into: [:str :sz| | plainJane herIntended1 herIntended2 |
 					"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 					plainJane := self strip: str.
-					herIntended := dreg = 0
-										ifTrue: [sreg = 0 ifTrue: ['nop '] ifFalse: ['xchgq ', dregname, ', ', sregname]]
-										ifFalse: ['xchgq ', sregname, ', ', dregname].
-					self assert: herIntended equals: plainJane.
+					(dreg = 0 and: [ sreg = 0 ])
+						ifTrue: [ herIntended1 := herIntended2 := 'nop' ]
+						ifFalse: [
+							herIntended1 := 'xchgq', self opcodeSeparator, sregname, ', ', dregname.
+							herIntended2 := 'xchgq', self opcodeSeparator, dregname, ', ', sregname ].
+					self assert: (plainJane = herIntended1 or: [plainJane = herIntended2]).
 					self assert: len = sz]]]
 ]

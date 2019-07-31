@@ -137,6 +137,18 @@ AbstractInstructionTests >> disassembleOpcodesIn: memory to: aStream [
 		on: aStream
 ]
 
+{ #category : #accessing }
+AbstractInstructionTests >> formatConstant: constant [
+
+	^ self processor formatConstantForInstruction: constant
+]
+
+{ #category : #formatting }
+AbstractInstructionTests >> formatOffset: anInteger [ 
+
+	^ self processor formatDisassembledOffset: anInteger
+]
+
 { #category : #'generating machine code' }
 AbstractInstructionTests >> gen: opcode [
 	| abstractInstruction |
@@ -237,15 +249,39 @@ AbstractInstructionTests >> memoryAsBytes: instructionMachineCode [
 	^instructionMachineCode
 ]
 
+{ #category : #formatting }
+AbstractInstructionTests >> memoryShiftFactorArgument [
+
+	^ self processor memoryShiftFactorArgument 
+]
+
 { #category : #'cogit compatibility' }
 AbstractInstructionTests >> methodLabel [
 	^nil
 ]
 
 { #category : #accessing }
+AbstractInstructionTests >> movByteOperationString [
+
+	^ 'movabsb'
+]
+
+{ #category : #accessing }
+AbstractInstructionTests >> movQuadWordOperationString [
+	
+	^ self processor movQuadWordOperationString
+]
+
+{ #category : #accessing }
 AbstractInstructionTests >> objectMemory [
 	"hack for testing"
 	^nil
+]
+
+{ #category : #running }
+AbstractInstructionTests >> opcodeSeparator [
+
+	^ processor opcodeSeparatorForTesting
 ]
 
 { #category : #private }
@@ -283,10 +319,8 @@ AbstractInstructionTests >> runAddCqR: assertPrintBar [
 			self processor
 				reset;
 				perform: rsetter with: (processor convertIntegerToInternal: b).
-			[[processor pc < len] whileTrue:
-				[self processor singleStepIn: memory]]
-				on: Error
-				do: [:ex| ].
+			[processor pc < len] whileTrue:
+				[self processor singleStepIn: memory].
 			"self processor printRegistersOn: Transcript.
 			 Transcript show: (self processor disassembleInstructionAt: 0 In: memory); cr"
 			assertPrintBar
@@ -323,10 +357,8 @@ AbstractInstructionTests >> runAddCwR: assertPrintBar [
 			self processor
 				reset;
 				perform: rsetter with: (self processor convertIntegerToInternal: b).
-			[[processor pc < len] whileTrue:
-				[self processor singleStepIn: memory]]
-				on: Error
-				do: [:ex| ].
+			[processor pc < len] whileTrue:
+				[self processor singleStepIn: memory].
 			"self processor printRegistersOn: Transcript.
 			 Transcript show: (self processor disassembleInstructionAt: 0 In: memory); cr"
 			assertPrintBar
@@ -368,10 +400,8 @@ AbstractInstructionTests >> runAddRR: assertPrintBar [
 					reset;
 					perform: srsetter with: (processor convertIntegerToInternal: a);
 					perform: drsetter with: (processor convertIntegerToInternal: b).
-				[[processor pc < len] whileTrue:
-					[self processor singleStepIn: memory]]
-					on: Error
-					do: [:ex| ].
+				[processor pc < len] whileTrue:
+					[self processor singleStepIn: memory].
 				"self processor printRegistersOn: Transcript.
 				 Transcript show: (self processor disassembleInstructionAt: 0 In: memory); cr"
 				assertPrintBar
@@ -453,7 +483,7 @@ AbstractInstructionTests >> runArithmeticShiftRightRR: assertPrintBar [
 { #category : #running }
 AbstractInstructionTests >> runBinaryConditionalJumps: assertPrintBar [
 	"self defaultTester runBinaryConditionalJumps: false"
-	| mask count reg1 reg2 reg3 reg1Getter reg2Setter reg3Setter |
+	| mask count reg1 reg2 reg3 reg1Getter reg2Setter reg3Setter bytes |
 	mask := (1 << self processor bitsInWord) - 1.
 	count := 0.
 	self concreteCompilerClass dataRegistersWithAccessorsDo:
@@ -480,7 +510,9 @@ AbstractInstructionTests >> runBinaryConditionalJumps: assertPrintBar [
 		jumpNotTaken := self gen: Jump.
 		jumpTaken jmpTarget: (self gen: MoveCqR operand: 1 operand: reg1).
 		jumpNotTaken jmpTarget: (nop := self gen: Nop).
-		memory := self generateInstructions.
+		bytes := self generateInstructions.
+		memory := ByteArray new: 4096.
+		memory replaceFrom: 1 to: bytes size with: bytes.
 		"self processor disassembleFrom: 0 to: memory size in: memory on: Transcript."
 		bogus := false.
 		self pairs: (-2 to: 2)  do:
@@ -843,6 +875,12 @@ AbstractInstructionTests >> setUp [
 	self concreteCompilerClass initializeAbstractRegisters
 ]
 
+{ #category : #accessing }
+AbstractInstructionTests >> strip: aFancyDisassembledInstruction [
+
+	^ processor stripDisassembledInstructionString: aFancyDisassembledInstruction
+]
+
 { #category : #tests }
 AbstractInstructionTests >> testBinaryConditionalJumps [
 	"self defaultTester testBinaryConditionalJumps"
@@ -864,23 +902,23 @@ AbstractInstructionTests >> testBinaryConditionalJumpsViaSubCqR [
 	self runBinaryConditionalJumpsViaSubCqR: true
 ]
 
-{ #category : #running }
+{ #category : #tests }
 AbstractInstructionTests >> testNegateR [
 	"self defaultTester testNegateR"
 	self concreteCompilerClass dataRegistersWithAccessorsDo:
 		[:reg :rgetter :rsetter|
 		-2 to: 2 do:
-			[:a| | inst len memory |
+			[:a| | inst len memory bytes |
 			inst := self gen: NegateR operand: reg.
 			len := inst concretizeAt: 0.
-			memory := self memoryAsBytes: inst machineCode.
+			bytes := self memoryAsBytes: inst machineCode.
+			memory := ByteArray new: 4096.
+			memory replaceFrom: 1 to: bytes size with: bytes startingAt: 1.
 			self processor
 				reset;
 				perform: rsetter with: (processor convertIntegerToInternal: a).
-			[[processor pc < len] whileTrue:
-				[self processor singleStepIn: memory]]
-				on: Error
-				do: [:ex| ].
+			[processor pc < len] whileTrue:
+				[self processor singleStepIn: memory].
 			"self processor printRegistersOn: Transcript.
 			 Transcript show: (self processor disassembleInstructionAt: 0 In: memory); cr"
 			self assert: processor pc equals: inst machineCodeSize.

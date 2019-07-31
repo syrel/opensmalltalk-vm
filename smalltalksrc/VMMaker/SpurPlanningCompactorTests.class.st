@@ -38,13 +38,6 @@ SpurPlanningCompactorTests >> checkForLeaksIn: om [
 		checkFreeSpace: GCModeFull
 ]
 
-{ #category : #failures }
-SpurPlanningCompactorTests >> expectedFailures [
-	^(FileDirectory default fileExists: SpurImageTestResource imageNameForTests)
-		ifTrue: [#()]
-		ifFalse: [self testSelectors]
-]
-
 { #category : #private }
 SpurPlanningCompactorTests >> initializedVM [
 	| newVM |

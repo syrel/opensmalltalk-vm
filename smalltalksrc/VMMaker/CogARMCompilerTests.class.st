@@ -54,17 +54,8 @@ CogARMCompilerTests >> objectMemory [
 
 { #category : #accessing }
 CogARMCompilerTests >> processor [
-	processor ifNil:
-		[processor := GdbARMAlien new].
+	processor ifNil: [ processor := CogSimulationProcessor arm ].
 	^processor
-]
-
-{ #category : #accessing }
-CogARMCompilerTests >> strip: aFancyDisassembledInstruction [
-	"When an immediate > 15, the disassembler appends '	; 0x\d\d'. That is stripped. Also strip any prepended stuff delimted by $: - perhaps memory addresses etc?"
-	^((aFancyDisassembledInstruction 
-		allButFirst: (aFancyDisassembledInstruction indexOf: $: ifAbsent:[-1]) + 1)
-			copyUpTo: $;) withBlanksTrimmed
 ]
 
 { #category : #tests }
@@ -145,7 +136,6 @@ CogARMCompilerTests >> testGenerateMul [
 	self gen: MoveRR operand: 0 operand: 2.
 	compiler genMulR: 1 R: 0.
 	memory := self generateInstructions.
-	self disassembleOpcodesIn: memory to: Transcript	.
 	{SmallInteger maxVal@2. SmallInteger minVal@2. 0@0. 1@1. -1@0. -1@1. -1@ -1} do:[:val | | x y |
 			x := val x.
 			y := val y.
@@ -176,10 +166,8 @@ CogARMCompilerTests >> testMoveCwR [
 			memory := self memoryAsBytes: inst machineCode.
 			self processor
 				reset.
-			[[processor pc < inst machineCodeSize] whileTrue:
-				[self processor singleStepIn: memory]]
-				on: Error
-				do: [:ex| ].
+			[processor pc < inst machineCodeSize] whileTrue:
+				[self processor singleStepIn: memory].
 			self concreteCompilerClass dataRegistersWithAccessorsDo:
 				[:ireg :getter :setter| | expected |
 				expected := getter == rgetter ifTrue: [ n ] ifFalse: [0].
@@ -204,10 +192,8 @@ CogARMCompilerTests >> testPerformAdd [
 			"self disassembleOpcodesIn: memory to: Transcript."
 			self processor
 				reset.
-			[[processor pc < memory size] whileTrue:
-				[self processor singleStepIn: memory]]
-				on: Error
-				do: [:ex| ].
+			[processor pc < memory size] whileTrue:
+				[self processor singleStepIn: memory].
 			self concreteCompilerClass dataRegistersWithAccessorsDo:
 				[:ireg :getter :setter| | expected |
 				expected := getter == rgetter ifTrue: [ n + 42] ifFalse: [0].
