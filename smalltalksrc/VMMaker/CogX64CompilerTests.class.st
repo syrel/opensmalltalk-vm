@@ -33,7 +33,7 @@ CogX64CompilerTests >> methodLabel [
 { #category : #accessing }
 CogX64CompilerTests >> processor [
 	processor ifNil:
-		[processor := CogSimulationProcessor x8664].
+		[processor := WLSimulationProcessor x8664].
 	^processor
 ]
 

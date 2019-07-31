@@ -54,7 +54,7 @@ CogARMCompilerTests >> objectMemory [
 
 { #category : #accessing }
 CogARMCompilerTests >> processor [
-	processor ifNil: [ processor := CogSimulationProcessor arm ].
+	processor ifNil: [ processor := WLSimulationProcessor arm ].
 	^processor
 ]
 

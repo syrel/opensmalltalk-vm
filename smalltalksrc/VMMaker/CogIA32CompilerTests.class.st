@@ -32,7 +32,7 @@ CogIA32CompilerTests >> methodLabel [
 
 { #category : #accessing }
 CogIA32CompilerTests >> processor [
-	processor ifNil: [ processor := CogSimulationProcessor x86 ].
+	processor ifNil: [ processor := WLSimulationProcessor x86 ].
 	^processor
 ]
 
