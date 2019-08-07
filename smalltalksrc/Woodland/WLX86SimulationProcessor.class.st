@@ -93,6 +93,18 @@ WLX86SimulationProcessor >> edx: anInteger [
 ]
 
 { #category : #accessing }
+WLX86SimulationProcessor >> eflags [
+
+	^ self readRegisterId: UcX86Registers eflags
+]
+
+{ #category : #accessing }
+WLX86SimulationProcessor >> eflags: anInteger [ 
+
+	^ self writeInteger: anInteger registerId: UcX86Registers eflags
+]
+
+{ #category : #accessing }
 WLX86SimulationProcessor >> eip [
 
 	^ self readRegisterId: UcX86Registers eip
@@ -146,7 +158,12 @@ WLX86SimulationProcessor >> initialize [
 	disassembler := LLVMDisassembler i386
 		setOptions: 2;
 		yourself.
-	simulator := Unicorn x86.
+]
+
+{ #category : #initialization }
+WLX86SimulationProcessor >> instantiateSimulator [
+	
+	^ Unicorn x86
 ]
 
 { #category : #testing }
@@ -169,7 +186,7 @@ WLX86SimulationProcessor >> pc [
 { #category : #accessing }
 WLX86SimulationProcessor >> registerNames [
 	
-	^ #(eax ecx edx ebx esp ebp esi edi eip)
+	^ #(eax ecx edx ebx esp ebp esi edi eip eflags)
 ]
 
 { #category : #resetting }
@@ -178,6 +195,18 @@ WLX86SimulationProcessor >> reset [
 	super reset.
 	"Enable SSE extensions by setting the OSFXSR (Operating System FXSAVE/FXRSTOR Support) bit"
 	self cr4: (self cr4 bitOr: 1 << 9)
+]
+
+{ #category : #accessing }
+WLX86SimulationProcessor >> stackPointer [
+
+	^ self esp
+]
+
+{ #category : #accessing }
+WLX86SimulationProcessor >> stackPointer: anInteger [ 
+
+	^ self esp: anInteger
 ]
 
 { #category : #accessing }
@@ -207,7 +236,9 @@ WLX86SimulationProcessor >> xmm0high: anUnsignedInteger [
 { #category : #accessing }
 WLX86SimulationProcessor >> xmm0low [
 
-	^ self readRegisterId: UcX86Registers xmm0low
+	| buffer |
+	buffer := self xmm0.
+	^ buffer unsignedLongLongAt: 1
 ]
 
 { #category : #accessing }

@@ -231,8 +231,13 @@ WLARMSimulationProcessor >> initialize [
 	bitsInWord := 32.	
 	disassembler := LLVMDisassembler arm
 		setOptions: 2;
-		yourself.
-	simulator := Unicorn arm.
+		yourself
+]
+
+{ #category : #initialization }
+WLARMSimulationProcessor >> instantiateSimulator [
+	
+	^ Unicorn arm
 ]
 
 { #category : #accessing }

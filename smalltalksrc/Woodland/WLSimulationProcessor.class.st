@@ -13,7 +13,8 @@ Class {
 		'simulator',
 		'disassembler',
 		'bitsInWord',
-		'memoryRegions'
+		'memoryRegions',
+		'executingPC'
 	],
 	#category : #Woodland
 }
@@ -42,6 +43,15 @@ WLSimulationProcessor >> bitsInWord [
 	^ bitsInWord
 ]
 
+{ #category : #initialization }
+WLSimulationProcessor >> configureSimulator [
+
+	simulator
+		registerInvalidMemoryAccessHook: UcHookType invalidMemoryAccess
+		doing: [ :type :address :size :value | 
+			self invalidMemoryAccessOfType: type at: address ofSize: size withValue: value ].
+]
+
 { #category : #testing }
 WLSimulationProcessor >> convertIntegerToInternal: anInteger [ 
 	"Default conversion for 32-bit processors.  64-bit processors override."
@@ -63,11 +73,28 @@ WLSimulationProcessor >> disassemble: anInteger in: aCollection [
 	[ disassembled size < anInteger and: [ offset < aCollection size ]] whileTrue: [
 		| result |
 		result := self disassembleInstructionAt: offset in: aCollection.
-		disassembled add: result first.
-		offset := offset + result second.
+		disassembled add: result.
+		offset := offset + result size.
 	].
 	^ disassembled
-	
+]
+
+{ #category : #disassembling }
+WLSimulationProcessor >> disassembleCount: anInteger [
+
+	^ self disassembleCount: anInteger atAddress: self pc
+]
+
+{ #category : #disassembling }
+WLSimulationProcessor >> disassembleCount: anInteger atAddress: address [ 
+
+	| codeRegion instructions |
+	codeRegion := simulator memoryAt: address readNext: anInteger * 10.
+	instructions := self disassemble: anInteger in: codeRegion.
+	"the returned instructions are disasembled in adresses relative to the code region.
+	We map them as absolutes in *address*"
+	instructions do: [ :e | e mapToAddress: address - 1 ].
+	^ instructions
 ]
 
 { #category : #disassembling }
@@ -77,9 +104,9 @@ WLSimulationProcessor >> disassembleInstructionAt: anInteger In: aCollection int
 	result := disassembler
 		disassembleInstructionIn: (aCollection copyFrom: anInteger + 1 to: aCollection size)
 		pc: anInteger.
-	disassembled := result first.
-	bytes := result second.
-	(result first = 'lock')
+	disassembled := result assembly.
+	bytes := result size.
+	(disassembled = 'lock')
 		ifTrue: [ | lockNext |
 			lockNext := disassembler disassembleInstructionIn: (aCollection allButFirst: bytes) pc: anInteger.
 			disassembled := disassembled, ' ', lockNext first.
@@ -93,19 +120,16 @@ WLSimulationProcessor >> disassembleInstructionAt: anInteger In: aCollection int
 { #category : #disassembling }
 WLSimulationProcessor >> disassembleInstructionAt: index in: aCollection [ 
 
-	| result disassembled bytes |
+	| result |
 	result := disassembler
 		disassembleInstructionIn: (aCollection copyFrom: index to: ((index + 10) min: aCollection size))
 		pc: self pc.
-	disassembled := result first.
-	bytes := result second.
-	^ { disassembled . bytes }
-]
 
-{ #category : #memory }
-WLSimulationProcessor >> doMemorySetFrom: address to: size with: bytes [ 
-	
-	simulator memoryAt: address -1 until: size setTo: bytes
+	^ WLInstruction new
+		address: index;
+		size: result size;
+		code: result assembly;
+		yourself
 ]
 
 { #category : #testing }
@@ -117,7 +141,48 @@ WLSimulationProcessor >> formatConstantForInstruction: anInteger [
 { #category : #initialization }
 WLSimulationProcessor >> initialize [
 	super initialize.
+	self setupSimulator.
 	memoryRegions := OrderedCollection new.
+]
+
+{ #category : #memory }
+WLSimulationProcessor >> installMemoryRegion: aMemoryRegion [
+
+	memoryRegions add: aMemoryRegion.
+	aMemoryRegion installInSimulator: simulator
+]
+
+{ #category : #initialization }
+WLSimulationProcessor >> instantiateSimulator [
+	
+	self subclassResponsibility
+]
+
+{ #category : #'error-handling' }
+WLSimulationProcessor >> invalidMemoryAccessOfType: anUcMemoryAccessType at: anInteger ofSize: anInteger3 withValue: anInteger4 [ 
+
+	| opcode |
+	opcode := simulator memoryAt: executingPC readNext: 1.
+	opcode first = 232 ifTrue: [ | relativeJump |
+		relativeJump := (simulator memoryAt: executingPC + 1 readNext: self wordSize) longAt: 1 bigEndian: false.
+		(ProcessorSimulationTrap
+				pc: executingPC
+				nextpc: executingPC + 5
+				address: (executingPC + 5 + relativeJump) signedIntToLong
+				type: #call)
+			signal
+	].
+	self halt.
+]
+
+{ #category : #memory }
+WLSimulationProcessor >> mapHostMemory: aMemory atAddress: anAddress withPermissions: permissions [
+
+	self installMemoryRegion: (WLMemoryRegion new
+		address: anAddress;
+		bytes: aMemory;
+		permissions: permissions;
+		yourself)
 ]
 
 { #category : #memory }
@@ -151,7 +216,13 @@ WLSimulationProcessor >> mapHostMemory: aMemory readExecuteOnlyBelow: anInteger 
 { #category : #memory }
 WLSimulationProcessor >> memoryAt: address put: anInteger [
 
-	self doMemorySetFrom: address to: 1 with: (ByteArray with: anInteger).
+	self memoryFrom: address writeNBytes: 1 fromByteArray: (ByteArray with: anInteger)
+]
+
+{ #category : #memory }
+WLSimulationProcessor >> memoryAt: address putAll: aByteArray [
+
+	self memoryFrom: address writeNBytes: 1 fromByteArray: aByteArray
 ]
 
 { #category : #memory }
@@ -160,10 +231,32 @@ WLSimulationProcessor >> memoryAtAllPut: anInteger [
 	memoryRegions do: [ :e | e atAllPut: anInteger ]
 ]
 
+{ #category : #memory }
+WLSimulationProcessor >> memoryFrom: address writeNBytes: size fromByteArray: aByteArray [
+
+	simulator memoryAt: address until: size setTo: aByteArray
+]
+
 { #category : #testing }
 WLSimulationProcessor >> opcodeSeparatorForTesting [
 
 	^ String tab
+]
+
+{ #category : #accessing }
+WLSimulationProcessor >> pc [
+
+	self subclassResponsibility
+]
+
+{ #category : #accessing }
+WLSimulationProcessor >> push: anInteger [ 
+
+	| buffer |
+	buffer := ByteArray new: 4.
+	buffer longAt: 1 put: anInteger bigEndian: false.
+	self stackPointer: self stackPointer - buffer size.
+	self memoryFrom: self stackPointer writeNBytes: buffer size fromByteArray: buffer.
 ]
 
 { #category : #accessing }
@@ -208,12 +301,22 @@ WLSimulationProcessor >> reset [
 	self registers do: [ :each | each value: 0 ].
 ]
 
+{ #category : #initialization }
+WLSimulationProcessor >> setupSimulator [
+
+	simulator := self instantiateSimulator.
+	self configureSimulator.
+]
+
+{ #category : #accessing }
+WLSimulationProcessor >> simulator [
+	^ simulator
+]
+
 { #category : #simulating }
 WLSimulationProcessor >> singleStep [
 
-	| errorCode |
-	errorCode := simulator startAt: self pc until: self pc + 100 timeout: 0 count: 1.
-	simulator verifyErrorCode: errorCode
+	self step
 ]
 
 { #category : #simulating }
@@ -225,14 +328,12 @@ WLSimulationProcessor >> singleStepIn: aMemory [
 	memory replaceFrom: 1 to: aMemory size with: aMemory.
 	memory pinInMemory.
 	
-	errorCode := simulator mapHostMemory: memory atAddress: 0 withPermissions: UnicornConstants permissionAll.
-	simulator verifyErrorCode: errorCode.
+	simulator mapHostMemory: memory atAddress: 0 withPermissions: UnicornConstants permissionAll.
 
-	errorCode := simulator startAt: self pc until: memory size timeout: 0 count: 1.
-	simulator verifyErrorCode: errorCode.
+	executingPC := self pc.
+	simulator startAt: self pc until: memory size timeout: 0 count: 1.
 	
-	errorCode := simulator unmapMemoryAtAddress: 0 ofSize: memory size.
-	simulator verifyErrorCode: errorCode.
+	simulator unmapMemoryAtAddress: 0 ofSize: memory size
 ]
 
 { #category : #simulating }
@@ -266,6 +367,27 @@ WLSimulationProcessor >> singleStepIn: aMemory readExecuteOnlyBelow: anInteger [
 	simulator verifyErrorCode: errorCode.
 	
 	aMemory replaceFrom: anInteger + 1 to: aMemory size with: writeMemory.
+]
+
+{ #category : #accessing }
+WLSimulationProcessor >> stackPointer [
+
+	^ self subclassResponsibility
+]
+
+{ #category : #accessing }
+WLSimulationProcessor >> stackPointer: anInteger [ 
+
+	^ self subclassResponsibility
+]
+
+{ #category : #simulating }
+WLSimulationProcessor >> step [
+
+	| currentMemoryRegion |
+	executingPC := self pc.
+	currentMemoryRegion := (memoryRegions detect: [ :e | e containsAddress: executingPC ]).
+	simulator startAt: executingPC until: currentMemoryRegion endAddress timeout: 0 count: 1.
 ]
 
 { #category : #testing }
