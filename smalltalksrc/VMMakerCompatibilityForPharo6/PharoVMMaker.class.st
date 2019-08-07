@@ -42,15 +42,17 @@ PharoVMMaker class >> generateCoInterpreter [
 PharoVMMaker class >> generateCoInterpreterMT [
 
 	VMMaker initializeForPharo.
+	(CoInterpreter bindingOf: #COGMTVM) value: true.
+	
 	[VMMaker
 		generateMainVM: CoInterpreterMT
 		and: StackToRegisterMappingCogit
 		with: #(COGMTVM true
-				ObjectMemory Spur64BitCoMemoryManager
+				ObjectMemory Spur64BitCoMTMemoryManager
 				MULTIPLEBYTECODESETS true
 				bytecodeTableInitializer initializeBytecodeTableForSqueakV3PlusClosuresSistaV1Hybrid)
-		to: FileSystem workingDirectory parent / 'extracted'
-		platformDir: FileSystem workingDirectory parent / 'extracted'
+		to: FileSystem workingDirectory / 'generated'
+		platformDir: FileSystem workingDirectory / 'generated'
 		including:#()] valueSupplyingAnswer: true.
 ]
 
