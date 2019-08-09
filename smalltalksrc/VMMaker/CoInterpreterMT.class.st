@@ -14,7 +14,8 @@ Class {
 		'activeProcessAffined',
 		'relinquishing',
 		'processHasThreadId',
-		'noThreadingOfGUIThread'
+		'noThreadingOfGUIThread',
+		'lock'
 	],
 	#classVars : [
 		'DisownFlagsShift',
@@ -23,7 +24,8 @@ Class {
 		'OwnVMForeignThreadFlag',
 		'ProcessUnaffinedOnDisown',
 		'ReturnToThreadSchedulingLoop',
-		'VMAlreadyOwnedHenceDoNotDisown'
+		'VMAlreadyOwnedHenceDoNotDisown',
+		'VMLockClass'
 	],
 	#pools : [
 		'VMThreadingConstants'
@@ -34,7 +36,7 @@ Class {
 { #category : #translation }
 CoInterpreterMT class >> ancilliaryClasses [
 	"Answer any extra classes to be included in the translation."
-	^super ancilliaryClasses, { CogThreadManager. CogVMThread }
+	^super ancilliaryClasses, { CogThreadManager. CogVMThread . self vmLockClass }
 ]
 
 { #category : #translation }
@@ -100,6 +102,13 @@ CoInterpreterMT class >> initializeSchedulerIndices [
 
 ]
 
+{ #category : #initialization }
+CoInterpreterMT class >> initializeWithOptions: options [
+
+	super initializeWithOptions: options.
+	VMLockClass := self environment at: (options at: #VMLockClass)
+]
+
 { #category : #accessing }
 CoInterpreterMT class >> interpreterVersion [ 
 	^ 'Cog MT'
@@ -135,6 +144,12 @@ CoInterpreterMT class >> sourceFileName [
 	"Answer the filename for the core interpreter"
 
 	^'cointerp.c'
+]
+
+{ #category : #translation }
+CoInterpreterMT class >> vmLockClass [
+
+	^ VMLockClass
 ]
 
 { #category : #'process primitive support' }
@@ -729,10 +744,8 @@ CoInterpreterMT >> initializeProcessorForThreadIndex: threadIndex [
 { #category : #initialization }
 CoInterpreterMT >> initializeVMOwnerLock [
 	
-	"Initially it seems we do not need to call anybody.
-	The VMOwner lock is initialized by the cogit, which has a ifdef COGMT for it...
-
-	cogit generateVMOwnerLockFunctions"
+	<doNotGenerate>
+	lock initializeVMOwnerLock
 ]
 
 { #category : #'process primitive support' }
@@ -1456,11 +1469,9 @@ CoInterpreterMT >> transferTo: newProc from: sourceCode [
 
 { #category : #'cog jit support' }
 CoInterpreterMT >> tryLockVMOwner [
-
-	"^ cogit cogitTryLockVMOwner"
-	^ self
-		cCode: '!pthread_mutex_trylock(&vmOwnerLock)'
-		inSmalltalk: [ true "taken" ]
+	<api>
+	<doNotGenerate>
+	^ lock tryLockVmOwner
 ]
 
 { #category : #'vm scheduling' }
@@ -1507,11 +1518,9 @@ CoInterpreterMT >> tryToExecuteSmalltalk: vmThread [
 
 { #category : #'cog jit support' }
 CoInterpreterMT >> unlockVMOwner [
-
-	"^ cogit cogitUnlockVMOwner"
-	^ self
-		cCode: 'pthread_mutex_unlock(&vmOwnerLock)'
-		inSmalltalk: [ self "unlock does never fail" ]
+	<api>
+	<doNotGenerate>
+	^ lock unlockVmOwner
 ]
 
 { #category : #'cog jit support' }

@@ -156,8 +156,7 @@ WLX86SimulationProcessor >> initialize [
 	
 	bitsInWord := 32.	
 	disassembler := LLVMDisassembler i386
-		setOptions: 2;
-		yourself.
+		printImmediatesInHexa
 ]
 
 { #category : #initialization }

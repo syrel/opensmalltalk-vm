@@ -335,7 +335,7 @@ CogX64CompilerTests >> testMoveAbR [
 				In: inst machineCode object
 				into: [:str :sz| | plainJane herIntended |
 					plainJane := self strip: str.
-					herIntended := self movByteOperationString, ' 0x', (self formatConstant: addr), ', %al'.
+					herIntended := self movByteOperationString, self opcodeSeparator, '0x', (self formatConstant: addr), ', %al'.
 					self assert: herIntended equals: plainJane.
 					totalsz := totalsz + sz].
 			regname ~= '%al' ifTrue:
@@ -375,6 +375,7 @@ CogX64CompilerTests >> testMoveAwR [
 				In: inst machineCode object
 				into: [:str :sz| | plainJane herIntended |
 					plainJane := self strip: str.
+					1halt.
 					herIntended := self movQuadWordOperationString,self opcodeSeparator, '0x', (self formatConstant: addr), ', %rax'.
 					self assert: herIntended equals: plainJane.
 					totalsz := totalsz + sz].
@@ -1204,7 +1205,7 @@ CogX64CompilerTests >> testXCHGAwR [
 				into: [:str :sz| | plainJane herIntended |
 					"Convert e.g. '00000000: movl %eax, 0x2(%eax) : 89 40 02' to  'movl %eax, 0x2(%eax)'"
 					plainJane := self strip: str.
-					herIntended := 'xchgl ', regname, ', 0x', (addr hex allButFirst: 3).
+					herIntended := 'xchgq', self opcodeSeparator, regname, ', 0x', (addr hex allButFirst: 3).
 					self assert: herIntended equals: plainJane.
 					self assert: len = sz]]]
 ]
@@ -1228,7 +1229,7 @@ CogX64CompilerTests >> testXCHGMwrR [
 					In: memory
 					into: [:str :sz| | plainJane herIntended |
 						plainJane := self strip: str.
-						herIntended := 'xchgl ', drname, ', 0x', (offset hex allButFirst: 3), '(', srname, ')'.
+						herIntended := 'xchgq', self opcodeSeparator, drname, ', 0x', (offset hex allButFirst: 3), '(', srname, ')'.
 						self assert: herIntended equals: plainJane.
 						self assert: memory size = sz]]]]
 ]

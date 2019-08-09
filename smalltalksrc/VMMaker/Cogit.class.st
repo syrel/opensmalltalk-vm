@@ -545,11 +545,7 @@ Cogit class >> declareCVarsIn: aCCodeGenerator [
 	NewspeakVM ifTrue:
 		[aCCodeGenerator addHeaderFile:'"nssendcache.h"'].
 	aCCodeGenerator
-		addHeaderFile:'#if COGMTVM';
-		addHeaderFile:'"cointerpmt.h"';
-		addHeaderFile:'#else';
 		addHeaderFile:'"cointerp.h"';
-		addHeaderFile:'#endif';
 		addHeaderFile:'"cogit.h"'.
 	aCCodeGenerator
 		var: #ceGetFP
@@ -3332,6 +3328,12 @@ Cogit >> assertSaneJumpTarget: jumpTarget [
 Cogit >> backEnd [
 	<cmacro: '() backEnd'>
 	^backEnd
+]
+
+{ #category : #accessing }
+Cogit >> backend [
+	<doNotGenerate>
+	^ backEnd
 ]
 
 { #category : #'tests-method map' }
@@ -11928,6 +11930,12 @@ Cogit >> setClickStepBreakBlock [
 
 { #category : #initialization }
 Cogit >> setInterpreter: aCoInterpreter [
+
+	self setInterpreter: aCoInterpreter processor: ProcessorClass new
+]
+
+{ #category : #initialization }
+Cogit >> setInterpreter: aCoInterpreter processor: aProcessor [
 	"Initialization of the code generator in the simulator.
 	 These objects already exist in the generated C VM
 	 or are used only in the simulation."
@@ -11942,7 +11950,7 @@ Cogit >> setInterpreter: aCoInterpreter [
 				objectRepresentation: objectRepresentation
 				cogit: self.
 	generatorTable := self class generatorTable.
-	processor := ProcessorClass new.
+	processor := aProcessor.
 	simulatedAddresses := Dictionary new.
 	simulatedTrampolines := Dictionary new.
 	simulatedVariableGetters := Dictionary new.

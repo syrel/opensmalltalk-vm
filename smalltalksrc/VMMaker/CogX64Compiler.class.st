@@ -441,14 +441,16 @@ CogX64Compiler >> computeMaximumSize [
 		[IDIVR]					-> [^3].
 		[IMULRR]				-> [^4].
 		[CPUID]					-> [^2].
-		[CMPXCHGAwR]			-> [^8].
+		[CMPXCHGAwR]			-> [^11].
 		[CMPXCHGMwrR]		-> [^9].
 		[LFENCE]				-> [^3].
 		[MFENCE]				-> [^3].
 		[SFENCE]				-> [^3].
 		[LOCK]					-> [^1].
-		[XCHGAwR]				-> [^6].
-		[XCHGMwrR]			-> [^7].
+		[XCHGAwR]				-> [^11].
+		[XCHGMwrR]			-> [^(((operands at: 1) bitAnd: 7) = RSP)
+										ifTrue: [(self isQuick: (operands at: 0)) ifTrue: [5] ifFalse: [8]]
+										ifFalse: [(self isQuick: (operands at: 0)) ifTrue: [4] ifFalse: [7]]].
 		[XCHGRR]				-> [^((operands at: 0) = RAX
 									   or: [(operands at: 1) = RAX])
 											ifTrue: [2]
@@ -2936,7 +2938,7 @@ CogX64Compiler >> concretizeXCHGAwR [
 	machineCode
 		at: 0 put: (self rexw: true r: reg x: 0 b: 0);
 		at: 1 put: 16r87;
-		at: 2 put: (self mod: ModReg RM: 0 RO: 7);
+		at: 2 put: (self mod: 0 RM: 2r100 RO: 0);
 		at: 3 put: (addressOperand bitAnd: 16rFF);
 		at: 4 put: (addressOperand >> 8 bitAnd: 16rFF);
 		at: 5 put: (addressOperand >> 16 bitAnd: 16rFF);
@@ -2945,7 +2947,54 @@ CogX64Compiler >> concretizeXCHGAwR [
 		at: 8 put: (addressOperand >> 40 bitAnd: 16rFF);
 		at: 9 put: (addressOperand >> 48 bitAnd: 16rFF);
 		at: 10 put: (addressOperand >> 56 bitAnd: 16rFF).
+		
 	^machineCodeSize := 11
+]
+
+{ #category : #'generating machine code' }
+CogX64Compiler >> concretizeXCHGMwrR [
+	<inline: true>
+	| srcReg offset destReg |
+	offset := operands at: 0.
+	srcReg := operands at: 1.
+	destReg := operands at: 2.
+	((srcReg bitAnd: 7) ~= RSP) ifTrue:
+		[(self isQuick: offset) ifTrue:
+			[machineCode
+				at: 0 put: (self rexw: true r: destReg x: 0 b: srcReg);
+				at: 1 put: 16r87;
+				at: 2 put: (self mod: ModRegRegDisp8 RM: srcReg RO: destReg);
+				at: 3 put: (offset bitAnd: 16rFF).
+			 ^machineCodeSize := 4].
+		machineCode
+			at: 0 put: (self rexw: true r: destReg x: 0 b: srcReg);
+			at: 1 put: 16r87;
+			at: 2 put: (self mod: ModRegRegDisp32 RM: srcReg RO: destReg);
+			at: 3 put: (offset bitAnd: 16rFF);
+			at: 4 put: (offset >> 8 bitAnd: 16rFF);
+			at: 5 put: (offset >> 16 bitAnd: 16rFF);
+			at: 6 put: (offset >> 24 bitAnd: 16rFF).
+		^machineCodeSize := 7].
+
+	"RSP:"
+	(self isQuick: offset) ifTrue:
+		[machineCode
+			at: 0 put: (self rexw: true r: destReg x: 0 b: srcReg);
+			at: 1 put: 16r87;
+			at: 2 put: (self mod: ModRegRegDisp8 RM: srcReg RO: destReg);
+			at: 3 put: (self s: SIB1 i: 4 b: srcReg);
+			at: 4 put: (offset bitAnd: 16rFF).
+		 ^machineCodeSize := 5].
+	machineCode
+		at: 0 put: (self rexw: true r: destReg x: 0 b: srcReg);
+		at: 1 put: 16r87;
+		at: 2 put: (self mod: ModRegRegDisp32 RM: srcReg RO: destReg);
+		at: 3 put: (self s: SIB1 i: 4 b: srcReg);
+		at: 4 put: (offset bitAnd: 16rFF);
+		at: 5 put: (offset >> 8 bitAnd: 16rFF);
+		at: 6 put: (offset >> 16 bitAnd: 16rFF);
+		at: 7 put: (offset >> 24 bitAnd: 16rFF).
+	^machineCodeSize := 8
 ]
 
 { #category : #'generate machine code' }
@@ -3230,7 +3279,7 @@ CogX64Compiler >> dispatchConcretizeProcessorSpecific [
 		[SFENCE]				-> [^self concretizeFENCE: 7].
 		"[LOCK]					-> [^self concretizeLOCK]."
 		[XCHGAwR]				-> [^self concretizeXCHGAwR].
-		"[XCHGMwrR]			-> [^self concretizeXCHGMwrR]."
+		[XCHGMwrR]			-> [^self concretizeXCHGMwrR].
 		[XCHGRR]				-> [^self concretizeXCHGRR].
 		[REP]					-> [^self concretizeREP].
 		[CLD]					-> [^self concretizeCLD].
@@ -3860,13 +3909,15 @@ CogX64Compiler >> generateLowLevelTryLock: vmOwnerLockAddress [
 			RetN: 0.
 		 ^self].
 	cogit
+		PushR: R10;
 		MoveCq: 1 R: RAX;
 		gen: MFENCE; "make the XCHG globally consistent"
-		MoveAw: vmOwnerLockAddress R: R10;
-		gen: XCHGRR operand: RAX operand: R10;
+		MoveCq: vmOwnerLockAddress R: R10;
+		gen: XCHGMwrR operand: 0 operand: R10 operand: RAX;
 		gen: SFENCE; "make the store globally visible"
 		SubCq: 1 R: RAX; "Since we only ever set the lock to 1 or 0, subtracting 1 sets
 						   EAX to 0 if the lock was already locked and non-zero if it wasn't."
+		PopR: R10;
 		RetN: 0
 ]
 

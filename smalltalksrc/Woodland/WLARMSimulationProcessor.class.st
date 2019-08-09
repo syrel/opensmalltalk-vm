@@ -230,8 +230,7 @@ WLARMSimulationProcessor >> initialize [
 	
 	bitsInWord := 32.	
 	disassembler := LLVMDisassembler arm
-		setOptions: 2;
-		yourself
+		printImmediatesInHexa
 ]
 
 { #category : #initialization }

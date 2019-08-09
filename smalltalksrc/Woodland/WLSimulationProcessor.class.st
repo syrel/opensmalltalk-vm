@@ -109,8 +109,8 @@ WLSimulationProcessor >> disassembleInstructionAt: anInteger In: aCollection int
 	(disassembled = 'lock')
 		ifTrue: [ | lockNext |
 			lockNext := disassembler disassembleInstructionIn: (aCollection allButFirst: bytes) pc: anInteger.
-			disassembled := disassembled, ' ', lockNext first.
-			bytes := bytes + lockNext second ].
+			disassembled := disassembled, ' ', lockNext assembly.
+			bytes := bytes + lockNext size ].
 	
 	aBlockClosure
 		value: disassembled
@@ -226,6 +226,39 @@ WLSimulationProcessor >> memoryAt: address putAll: aByteArray [
 ]
 
 { #category : #memory }
+WLSimulationProcessor >> memoryAt: address readNext: size [
+
+	^ simulator memoryAt: address readNext: size
+]
+
+{ #category : #memory }
+WLSimulationProcessor >> memoryAt: address writeBytes: aByteArray [
+
+	simulator memoryAt: address until: aByteArray size setTo: aByteArray
+]
+
+{ #category : #memory }
+WLSimulationProcessor >> memoryAt: anAddress writeInteger: anInteger signed: aBoolean [
+
+	| buffer |
+	buffer := ByteArray new: self wordSize.
+	buffer integerAt: 1 put: anInteger size: self wordSize signed: aBoolean.
+	simulator memoryAt: anAddress write: buffer
+]
+
+{ #category : #memory }
+WLSimulationProcessor >> memoryAt: anAddress writeSignedInt: aSignedInteger [
+
+	self memoryAt: anAddress writeInteger: aSignedInteger signed: true
+]
+
+{ #category : #memory }
+WLSimulationProcessor >> memoryAt: anAddress writeUnsignedInt: anUnsignedInteger [
+
+	self memoryAt: anAddress writeInteger: anUnsignedInteger signed: false
+]
+
+{ #category : #memory }
 WLSimulationProcessor >> memoryAtAllPut: anInteger [ 
 
 	memoryRegions do: [ :e | e atAllPut: anInteger ]
@@ -250,6 +283,12 @@ WLSimulationProcessor >> pc [
 ]
 
 { #category : #accessing }
+WLSimulationProcessor >> pc: anInteger [ 
+
+	self subclassResponsibility
+]
+
+{ #category : #accessing }
 WLSimulationProcessor >> push: anInteger [ 
 
 	| buffer |
@@ -257,6 +296,14 @@ WLSimulationProcessor >> push: anInteger [
 	buffer longAt: 1 put: anInteger bigEndian: false.
 	self stackPointer: self stackPointer - buffer size.
 	self memoryFrom: self stackPointer writeNBytes: buffer size fromByteArray: buffer.
+]
+
+{ #category : #memory }
+WLSimulationProcessor >> readIntegerAt: anAddress signed: aBoolean [
+	
+	| buffer |
+	buffer := simulator memoryAt: anAddress readNext: self wordSize.
+	^ buffer integerAt: 1 size: self wordSize signed: aBoolean
 ]
 
 { #category : #accessing }
@@ -280,6 +327,18 @@ WLSimulationProcessor >> readRegisterId: aRegisterId size: aSize [
 WLSimulationProcessor >> readRegisterNamed: aString [ 
 	
 	^ self perform: aString asSymbol
+]
+
+{ #category : #memory }
+WLSimulationProcessor >> readSignedIntAt: anAddress [
+	
+	^ self readIntegerAt: anAddress signed: true
+]
+
+{ #category : #memory }
+WLSimulationProcessor >> readUnsignedIntAt: anAddress [
+	
+	^ self readIntegerAt: anAddress signed: false
 ]
 
 { #category : #accessing }

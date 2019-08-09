@@ -48,6 +48,7 @@ PharoVMMaker class >> generateCoInterpreterMT [
 		generateMainVM: CoInterpreterMT
 		and: StackToRegisterMappingCogit
 		with: #(COGMTVM true
+				VMLockClass CoCogitVMLock
 				ObjectMemory Spur64BitCoMTMemoryManager
 				MULTIPLEBYTECODESETS true
 				bytecodeTableInitializer initializeBytecodeTableForSqueakV3PlusClosuresSistaV1Hybrid)

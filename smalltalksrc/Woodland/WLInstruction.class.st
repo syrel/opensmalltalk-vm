@@ -35,6 +35,12 @@ WLInstruction >> mapToAddress: anAbsoluteAddress [
 	address := address + anAbsoluteAddress
 ]
 
+{ #category : #printing }
+WLInstruction >> printOn: aStream [
+
+	aStream print: code
+]
+
 { #category : #accessing }
 WLInstruction >> size [
 

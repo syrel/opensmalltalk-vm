@@ -26,8 +26,7 @@ WLX8664SimulationProcessor >> initialize [
 	
 	bitsInWord := 64.
 	disassembler := LLVMDisassembler amd64
-		setOptions: 2;
-		yourself
+		printImmediatesInHexa
 ]
 
 { #category : #initialization }
@@ -52,6 +51,12 @@ WLX8664SimulationProcessor >> movQuadWordOperationString [
 WLX8664SimulationProcessor >> pc [
 
 	^self rip
+]
+
+{ #category : #accessing }
+WLX8664SimulationProcessor >> pc: anInteger [ 
+	
+	self rip: anInteger
 ]
 
 { #category : #accessing }
@@ -261,6 +266,16 @@ WLX8664SimulationProcessor >> rsp [
 { #category : #accessing }
 WLX8664SimulationProcessor >> rsp: anInteger [
 	^ self writeInteger: anInteger registerId: UcX86Registers rsp
+]
+
+{ #category : #accessing }
+WLX8664SimulationProcessor >> stackPointer [
+	^ self rsp
+]
+
+{ #category : #accessing }
+WLX8664SimulationProcessor >> stackPointer: aValue [
+	self rsp: aValue
 ]
 
 { #category : #accessing }

@@ -166,9 +166,7 @@ CoInterpreter class >> declareCVarsIn: aCCodeGenerator [
 	NewspeakVM ifTrue:
 		[aCCodeGenerator addHeaderFile:'"nssendcache.h"'].
 	aCCodeGenerator
-		addHeaderFile: (aCCodeGenerator vmClass isThreadedVM 
-			ifTrue: ['"cointerpmt.h"'] 
-			ifFalse: ['"cointerp.h"']);
+		addHeaderFile: '"cointerp.h"';
 		addHeaderFile:'"cogit.h"'.
 	aCCodeGenerator vmClass
 		declareInterpreterVersionIn: aCCodeGenerator
