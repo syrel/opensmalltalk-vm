@@ -8,7 +8,7 @@ Class {
 		'VMBasicConstants',
 		'VMThreadingConstants'
 	],
-	#category : #'VMMakerCompatibilityForPharo6-Tests'
+	#category : #'VMMakerMT-Tests'
 }
 
 { #category : #running }

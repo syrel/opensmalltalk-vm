@@ -4,7 +4,7 @@ Class {
 	#instVars : [
 		'objectMemory'
 	],
-	#category : #'VMMakerCompatibilityForPharo6-Tests'
+	#category : #VMMakerTests
 }
 
 { #category : #'instance creation' }

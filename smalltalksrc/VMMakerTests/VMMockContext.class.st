@@ -5,7 +5,7 @@ Class {
 		'sender',
 		'instructionPointer'
 	],
-	#category : #'VMMakerCompatibilityForPharo6-Tests'
+	#category : #VMMakerTests
 }
 
 { #category : #accessing }

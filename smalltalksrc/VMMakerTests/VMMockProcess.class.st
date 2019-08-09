@@ -8,7 +8,7 @@ Class {
 		'myList',
 		'threadId'
 	],
-	#category : #'VMMakerCompatibilityForPharo6-Tests'
+	#category : #VMMakerTests
 }
 
 { #category : #accessing }
