@@ -8,6 +8,32 @@ Class {
 	#category : #'VMMakerTests-InterpreterTests'
 }
 
+{ #category : #helpers }
+VMInterpreterTests >> installArrayClass [
+		| aClass |
+	aClass := self
+		newClassInOldSpaceWithSlots: 0
+		instSpec: Array instSpec.
+	memory setHashBitsOf: aClass to: ClassArrayCompactIndex.
+	memory
+		storePointer: ClassArrayCompactIndex
+		ofObject: memory classTableFirstPage
+		withValue: aClass
+]
+
+{ #category : #helpers }
+VMInterpreterTests >> installBlockClosureClass [
+		| aClass |
+	aClass := self
+		newClassInOldSpaceWithSlots: 0
+		instSpec: BlockClosure instSpec.
+	memory setHashBitsOf: aClass to: ClassBlockClosureCompactIndex.
+	memory
+		storePointer: ClassBlockClosureCompactIndex
+		ofObject: memory classTableFirstPage
+		withValue: aClass
+]
+
 { #category : #tests }
 VMInterpreterTests >> installSelector: aSelectorOop method: aMethodOop inMethodDictionary: aMethodDictionary [
 	

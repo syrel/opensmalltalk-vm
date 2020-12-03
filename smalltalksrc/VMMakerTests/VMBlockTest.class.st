@@ -13,6 +13,31 @@ VMBlockTest >> anEmptyMethod [
 ]
 
 { #category : #'as yet unclassified' }
+VMBlockTest >> evaluateBlockReadingOuterMethodVariable [
+
+	| aVariable |
+	aVariable := 42.
+	^ [ aVariable ] value 
+]
+
+{ #category : #'as yet unclassified' }
+VMBlockTest >> evaluateBlockWritingAndReadingOuterMethodVariable [
+
+	| aVariable |
+	^ [ 
+	  aVariable := 42.
+	  aVariable ] value
+]
+
+{ #category : #'as yet unclassified' }
+VMBlockTest >> evaluateBlockWritingOuterMethodVariable [
+
+	| aVariable |
+	[ aVariable := 42 ] value.
+	^ aVariable
+]
+
+{ #category : #'as yet unclassified' }
 VMBlockTest >> evaluatingABlock [
 
   ^[42] value
@@ -28,23 +53,6 @@ VMBlockTest >> evaluatingABlockWithLocalBlockVariable [
 ]
 
 { #category : #'as yet unclassified' }
-VMBlockTest >> evaluatingABlockWithLocalMethodVariableAssignedInTheBlock [
-
-	| aVariable |
-	^ [ 
-	  aVariable := 42.
-	  aVariable ] value
-]
-
-{ #category : #'as yet unclassified' }
-VMBlockTest >> evaluatingABlockWithLocalMethodVariableRead [
-
-	| aVariable |
-	aVariable := 42.
-	^ [ aVariable ] value 
-]
-
-{ #category : #'as yet unclassified' }
 VMBlockTest >> evaluatingABlockWithNonLocalReturn [
 
   [^1] value
@@ -55,9 +63,7 @@ VMBlockTest >> executeMethod: aMethodToTest [
 
 	| methodReturning initialMethod |
 	
-	methodReturning := self createMethodOopFromPharoMethod:
-		             aMethodToTest.
-
+	methodReturning := self createMethodOopFromPharoMethod: aMethodToTest.
 	initialMethod := self createMethodOopFromPharoMethod:
 		                     self class >> #anEmptyMethod.
 
@@ -65,25 +71,13 @@ VMBlockTest >> executeMethod: aMethodToTest [
 	stackBuilder addNewFrame method: initialMethod.
 	stackBuilder addNewFrame
 		method: methodReturning;
+		temps: ((1 to: aMethodToTest numTemps) collect: [ :i | memory nilObject ]);
 		receiver: memory trueObject.
 	stackBuilder buildStack.
 	
 	interpreter instructionPointer: (methodBuilder bytecodeAt: 0 forMethod: methodReturning).
 	interpreter interpretWhile: [ interpreter method = methodReturning ].
 
-]
-
-{ #category : #helpers }
-VMBlockTest >> installBlockClosureClass [
-		| aClass |
-	aClass := self
-		newClassInOldSpaceWithSlots: 0
-		instSpec: BlockClosure instSpec.
-	memory setHashBitsOf: aClass to: ClassBlockClosureCompactIndex.
-	memory
-		storePointer: ClassBlockClosureCompactIndex
-		ofObject: memory classTableFirstPage
-		withValue: aClass
 ]
 
 { #category : #supports }
@@ -120,6 +114,7 @@ VMBlockTest >> methodWithLocalReturningABlock [
 VMBlockTest >> setUp [
 
    super setUp.
+	self installArrayClass.
 	self installBlockClosureClass.
 ]
 
@@ -242,10 +237,36 @@ VMBlockTest >> testEvaluatingABlockWithLocalBlockVariable [
 ]
 
 { #category : #'as yet unclassified' }
-VMBlockTest >> testEvaluatingABlockWithLocalMethodVariable [
+VMBlockTest >> testEvaluatingABlockWithLocalMethodVariableRead [
 
 	| methodToTest |
-	methodToTest := self class >> #evaluatingABlockWithLocalMethodVariableAssignedInTheBlock.
+	methodToTest := self class >> #evaluateBlockReadingOuterMethodVariable.
+
+	self executeMethod: methodToTest.
+
+	self
+		assert: interpreter stackTop
+		equals: (memory integerObjectOf: 42)
+]
+
+{ #category : #'as yet unclassified' }
+VMBlockTest >> testEvaluatingABlockWithLocalMethodVariableReadAndWrite [
+
+	| methodToTest |
+	methodToTest := self class >> #evaluateBlockWritingAndReadingOuterMethodVariable.
+
+	self executeMethod: methodToTest.
+
+	self
+		assert: interpreter stackTop
+		equals: (memory integerObjectOf: 42)
+]
+
+{ #category : #'as yet unclassified' }
+VMBlockTest >> testEvaluatingABlockWithLocalMethodVariableWrite [
+
+	| methodToTest |
+	methodToTest := self class >> #evaluateBlockWritingOuterMethodVariable.
 
 	self executeMethod: methodToTest.
 

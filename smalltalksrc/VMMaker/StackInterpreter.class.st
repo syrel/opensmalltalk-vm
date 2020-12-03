@@ -17153,8 +17153,7 @@ StackInterpreter >> printActivationNameFor: aMethod receiver: anObject isBlock: 
 					 self printNameOfClass: methClass count: 5.
 					 self print: ')']]
 		ifFalse:
-			[self cCode: '' inSmalltalk: [self halt].
-			 self print: 'INVALID RECEIVER'].
+			[ self print: 'INVALID RECEIVER'].
 	self print: '>'.
 	(objectMemory addressCouldBeOop: methodSel)
 		ifTrue:

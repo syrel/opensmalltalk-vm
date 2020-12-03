@@ -17,19 +17,6 @@ Class {
 }
 
 { #category : #tests }
-VMLookUpTest >> setArrayClassIntoClassTable [
-	| aClass |
-	aClass := self
-		newClassInOldSpaceWithSlots: 0
-		instSpec: Array instSpec.
-	memory setHashBitsOf: aClass to: ClassArrayCompactIndex.
-	memory
-		storePointer: ClassArrayCompactIndex
-		ofObject: memory classTableFirstPage
-		withValue: aClass
-]
-
-{ #category : #tests }
 VMLookUpTest >> setMessageClassIntoClassTable [
 	| aClass |
 	aClass := self
@@ -118,7 +105,7 @@ VMLookUpTest >> testLookUpFindsMethodInSuperclass [
 
 	| superclass superclassMethodDictionary |
 	self setUpClassAndMethod.
-	self setArrayClassIntoClassTable.
+	self installArrayClass.
 	self setMessageClassIntoClassTable.
 	self setUpMethodDictionaryIn: receiverClass.
 	
@@ -158,7 +145,7 @@ VMLookUpTest >> testLookUpInFindsCannotInterpretCreatesANewEntryInCache [
 
 	| nonExistingSelector cannotInterpretMethodOop cannotInterpretSelectorOop superclass superclassMethodDictionary |
 	self setUpClassAndMethod.
-	self setArrayClassIntoClassTable.
+	self installArrayClass.
 	self setMessageClassIntoClassTable.
 	
 	superclass := self
@@ -188,7 +175,7 @@ VMLookUpTest >> testLookUpInFindsDNUCreatesANewEntryInCache [
 
 	| nonExistingSelector dnuMethodOop dnuSelectorOop aMethodDictionary |
 	self setUpClassAndMethod.
-	self setArrayClassIntoClassTable.
+	self installArrayClass.
 	self setMessageClassIntoClassTable.
 	self setUpMethodDictionaryIn: receiverClass.
 	aMethodDictionary := memory fetchPointer: MethodDictionaryIndex ofObject: receiverClass.
@@ -236,7 +223,7 @@ VMLookUpTest >> testLookUpNonExistingCannotInterpretAnswersDNUMethod [
 
 	| nonExistingSelector superclass superclassMethodDictionary dnuMethodOop dnuSelectorOop |
 	self setUpClassAndMethod.
-	self setArrayClassIntoClassTable.
+	self installArrayClass.
 	self setMessageClassIntoClassTable.
 	
 	superclass := self
@@ -266,7 +253,7 @@ VMLookUpTest >> testLookUpNonExistingDNUThrowsRecursivelyDoesNotUnderstand [
 
 	| nonExistingSelector aMethodDictionary |
 	self setUpClassAndMethod.
-	self setArrayClassIntoClassTable.
+	self installArrayClass.
 	self setMessageClassIntoClassTable.
 	self setUpMethodDictionaryIn: receiverClass.
 	aMethodDictionary := memory fetchPointer: MethodDictionaryIndex ofObject: receiverClass.
@@ -287,7 +274,7 @@ VMLookUpTest >> testLookUpNonExistingSelectorAnswersDNUMethod [
 
 	| nonExistingSelector dnuMethodOop dnuSelectorOop aMethodDictionary |
 	self setUpClassAndMethod.
-	self setArrayClassIntoClassTable.
+	self installArrayClass.
 	self setMessageClassIntoClassTable.
 	self setUpMethodDictionaryIn: receiverClass.
 	aMethodDictionary := memory fetchPointer: MethodDictionaryIndex ofObject: receiverClass.
@@ -313,7 +300,7 @@ VMLookUpTest >> testLookUpWithNilMethodDictionaryFindsCannotInterpret [
 
 	| nonExistingSelector cannotInterpretMethodOop cannotInterpretSelectorOop superclass superclassMethodDictionary |
 	self setUpClassAndMethod.
-	self setArrayClassIntoClassTable.
+	self installArrayClass.
 	self setMessageClassIntoClassTable.
 	
 	superclass := self
