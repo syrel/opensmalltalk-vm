@@ -2102,6 +2102,7 @@ StackInterpreter >> activateNewClosure: blockClosure outer: outerContext method:
 	self assert: theMethod = (objectMemory fetchPointer: MethodIndex ofObject: outerContext).
 	self assert: (objectMemory isOopCompiledMethod: theMethod).
 
+   "Create a pseudo frame"
 	self push: instructionPointer.
 	self push: framePointer.
 	framePointer := stackPointer.
@@ -5382,6 +5383,12 @@ StackInterpreter >> createActualMessageTo: lookupClass [
 	self push: message.
 
 	argumentCount := 1
+]
+
+{ #category : #accessing }
+StackInterpreter >> currentBytecode [
+
+	^currentBytecode 
 ]
 
 { #category : #'stack pages' }
