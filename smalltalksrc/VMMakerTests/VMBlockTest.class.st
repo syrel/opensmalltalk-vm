@@ -58,6 +58,12 @@ VMBlockTest >> evaluatingABlockWithNonLocalReturn [
   [^1] value
 ]
 
+{ #category : #'as yet unclassified' }
+VMBlockTest >> evaluatingABlockWithNonLocalReturnWithArguments [
+
+  [:a :b | ^1] valueWithArguments: #(2 3)
+]
+
 { #category : #testing }
 VMBlockTest >> executeMethod: aMethodToTest [
 
@@ -172,8 +178,9 @@ VMBlockTest >> setUp [
 
 { #category : #testing }
 VMBlockTest >> testCreatingABlockClosureShouldCopyUsedMethodVariable [
-
+ 
 	| methodToTest |
+
 	methodToTest := self class >> #methodWithLocalReturningABlock.
 
 	self executeMethod: methodToTest.
@@ -276,6 +283,24 @@ VMBlockTest >> testEvaluatingABlock [
 ]
 
 { #category : #'as yet unclassified' }
+VMBlockTest >> testEvaluatingABlockCreatesAFrame [
+
+	| methodToTest topFrame vmMethod |
+	methodToTest := self class >> #evaluatingABlockWithNonLocalReturn.	
+	"for convenience the message return the VM method created"
+	"Bytecode doing the value message"
+	vmMethod := self executeMethod: methodToTest stopAfterBytecode: 201.
+
+	topFrame := VMStackFrame newFramePointer: (interpreter framePointer) withInterpreter: interpreter.
+
+	self assert: topFrame context isNilObject.
+	self assert: topFrame method equals: vmMethod.
+	self assert: topFrame receiver equals: topFrame caller receiver.
+	
+	
+]
+
+{ #category : #'as yet unclassified' }
 VMBlockTest >> testEvaluatingABlockWithLocalBlockVariable [
 
 	| methodToTest |
@@ -331,8 +356,8 @@ VMBlockTest >> testEvaluatingABlockWithLocalMethodVariableWrite [
 VMBlockTest >> testEvaluatingABlockWithNonLocalReturn [
 
 	| methodToTest |
-	methodToTest := self class >> #evaluatingABlockWithNonLocalReturn.
-
+	methodToTest := self class >> #evaluatingABlockWithNonLocalReturnWithArguments.
+	
 	self executeMethod: methodToTest.
 
 	self assert: true
