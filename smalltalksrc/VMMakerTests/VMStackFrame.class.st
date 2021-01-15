@@ -141,7 +141,11 @@ VMStackFrame >> methodOop [
 VMStackFrame >> receiver [
 	^ interpreter framePointer = framePointer
 		ifTrue: [ interpreter receiver ]
-		ifFalse: [ self halt. interpreter frameCallerSavedIP: ( interpreter findFrameAbove: framePointer inPage: self stackPage) ]
+		ifFalse: [
+			"if the frame is on the same page"
+			interpreter stackPages longAt: framePointer + FoxReceiver.
+			
+			"self halt. interpreter frameCallerSavedIP: ( interpreter findFrameAbove: framePointer inPage: self stackPage)" ]
 ]
 
 { #category : #accessing }

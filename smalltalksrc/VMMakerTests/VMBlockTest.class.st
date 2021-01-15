@@ -81,6 +81,58 @@ VMBlockTest >> executeMethod: aMethodToTest [
 ]
 
 { #category : #supports }
+VMBlockTest >> executeMethod: aMethodToTest stopAfterBytecode: aBytecode [
+
+	| methodReturning initialMethod flag|
+	methodReturning := self createMethodOopFromPharoMethod: aMethodToTest.
+	initialMethod := self createMethodOopFromPharoMethod:
+		                 self class >> #anEmptyMethod.
+
+	"We want to avoid baseFrameReturn (base frame initialisation)"
+	stackBuilder addNewFrame method: initialMethod.
+	stackBuilder addNewFrame
+		method: methodReturning;
+		temps:
+			((1 to: aMethodToTest numTemps) collect: [ :i | memory nilObject ]);
+		receiver: memory trueObject.
+	stackBuilder buildStack.
+
+	interpreter instructionPointer:
+		(methodBuilder bytecodeAt: 0 forMethod: methodReturning).
+	interpreter interpretWhile: [ 
+		interpreter currentBytecode = aBytecode
+			ifTrue: [ 
+				flag := true. "we reached our bytecode"
+				true "we execute the bytecode"]
+			ifFalse: [ flag ifNil: [ flag := false ]. flag not] ].
+		
+	"for convenience this return the method which is need for testEvaluatingABlockCreatesAFrame"
+	 ^methodReturning
+]
+
+{ #category : #supports }
+VMBlockTest >> executeMethod: aMethodToTest stopBeforeBytecode: aBytecode [
+
+	| methodReturning initialMethod |
+	methodReturning := self createMethodOopFromPharoMethod: aMethodToTest.
+	initialMethod := self createMethodOopFromPharoMethod:
+		                 self class >> #anEmptyMethod.
+
+	"We want to avoid baseFrameReturn (base frame initialisation)"
+	stackBuilder addNewFrame method: initialMethod.
+	stackBuilder addNewFrame
+		method: methodReturning;
+		temps:
+			((1 to: aMethodToTest numTemps) collect: [ :i | memory nilObject ]);
+		receiver: memory trueObject.
+	stackBuilder buildStack.
+
+	interpreter instructionPointer:
+		(methodBuilder bytecodeAt: 0 forMethod: methodReturning).
+	interpreter interpretWhile: [ (interpreter currentBytecode = aBytecode) not ]
+]
+
+{ #category : #supports }
 VMBlockTest >> methodReturningABlock [
 	
 	^ []
