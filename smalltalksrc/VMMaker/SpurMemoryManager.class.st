@@ -1228,6 +1228,11 @@ SpurMemoryManager >> activeAndDeferredScan: anEphemeron [
 	^self pushOnUnscannedEphemeronsStack: anEphemeron
 ]
 
+{ #category : #accessing }
+SpurMemoryManager >> activeProcess [
+	self shouldBeImplemented.
+]
+
 { #category : #'free space' }
 SpurMemoryManager >> addFreeChunkWithBytes: bytes at: address [
 	totalFreeOldSpace := totalFreeOldSpace + bytes.

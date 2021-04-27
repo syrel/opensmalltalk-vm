@@ -128,7 +128,7 @@ VMStackBuilder >> page: anObject [
 { #category : #build }
 VMStackBuilder >> preparePage [
 	"Page setup before the base frame"
-	interpreter push: memory nilObject.	"receiver"
+	interpreter push: frames first receiver.	"receiver"
 	self pushArgs. "arguments"
 	interpreter push: memory nilObject.  "senderContext"
 	interpreter push: 0. "savedFp"

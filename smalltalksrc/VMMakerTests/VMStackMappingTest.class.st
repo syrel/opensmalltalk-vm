@@ -18,13 +18,6 @@ VMStackMappingTest >> buildStackFromFrames [
 
 ]
 
-{ #category : #helpers }
-VMStackMappingTest >> newContext [
-	| method |
-	method:= methodBuilder newMethod buildMethod.
-	^self newSmallContextReceiver: memory nilObject method: method arguments: #() temporaries: #() ip: 10.
-]
-
 { #category : #tests }
 VMStackMappingTest >> testCreatingNewContextByHandShouldbeSingle [
 

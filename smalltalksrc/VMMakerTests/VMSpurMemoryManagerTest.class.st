@@ -36,26 +36,13 @@ VMSpurMemoryManagerTest class >> testParameters [
 			yourself
 ]
 
-{ #category : #helpers }
+{ #category : #running }
 VMSpurMemoryManagerTest >> createActiveProcess [
 
-	| processorOopAssociation processorOop processorListsArray priorities |
-
-	"The ScheduleAssocation should be initialized to a valid Processor object"
-	processorOopAssociation := self newObjectWithSlots: 2.
-	processorOop := self newObjectWithSlots: 2.
-	priorities := 2.
-	processorListsArray := self newObjectWithSlots: priorities.
-	1 to: priorities do: [ :index |
-		"Put an empty linked list in each"
-		memory storePointer: index - 1 ofObject: processorListsArray withValue: (self newObjectWithSlots: 2) ].
+	| activeProcessOop |
+	"Creates the active process"
+	activeProcessOop := self createNewProcessWithPriority: 1 asActiveProcess: true.
 	
-	memory splObj: SchedulerAssociation put: processorOopAssociation.
-	memory storePointer: ValueIndex ofObject: processorOopAssociation withValue: processorOop.
-	memory storePointer: ProcessListsIndex ofObject: processorOop withValue: processorListsArray.
-	
-	"Create a new process with the 4 mandatory instance variables and set it as active process"
-	memory storePointer: ActiveProcessIndex ofObject: processorOop withValue:  (self newObjectWithSlots: 4).
 ]
 
 { #category : #helpers }
@@ -71,6 +58,28 @@ VMSpurMemoryManagerTest >> createMethodOopFromPharoMethod: aPharoCompiledMethod 
 		             fillFromPharoMethod: v3Method;
 		             buildMethod.
 	^ methodOop
+]
+
+{ #category : #running }
+VMSpurMemoryManagerTest >> createNewProcessWithPriority: anInteger asActiveProcess: aBoolean [
+
+	| activeProcessOop context |
+	activeProcessOop := self newObjectWithSlots: 4. "Creates the active process"
+	context := self newContext.
+	memory
+		storePointer: PriorityIndex
+		ofObject: activeProcessOop
+		withValue: (memory integerObjectOf: anInteger).
+	memory 	
+		storePointer: SuspendedContextIndex 
+		ofObject: activeProcessOop
+		withValue: context.
+	 	
+	interpreter instructionPointer: (memory fetchPointer: InstructionPointerIndex  ofObject: context).
+	interpreter internalizeIPandSP.
+	memory memoryActiveProcess: activeProcessOop.
+		
+	^ activeProcessOop
 ]
 
 { #category : #accessing }
@@ -228,6 +237,14 @@ VMSpurMemoryManagerTest >> newClassInOldSpaceWithSlots: numberOfSlots instSpec: 
 ]
 
 { #category : #helpers }
+VMSpurMemoryManagerTest >> newContext [
+	| method ip |
+	method:= methodBuilder newMethod buildMethod.
+	ip := methodBuilder bytecodeAt: 1 forMethod: method.
+	^self newSmallContextReceiver: memory nilObject method: method arguments: #() temporaries: #() ip: ip.
+]
+
+{ #category : #helpers }
 VMSpurMemoryManagerTest >> newInterpreter [
 
 	memory := self newMemory.
@@ -367,6 +384,11 @@ VMSpurMemoryManagerTest >> newSmallContextReceiver: anOop method: aMethodOop arg
 	^ newCtx
 ]
 
+{ #category : #running }
+VMSpurMemoryManagerTest >> newSpaceSize [ 
+ ^1 * 1024
+]
+
 { #category : #helpers }
 VMSpurMemoryManagerTest >> newString: aString [
 	| vmString |
@@ -454,7 +476,7 @@ VMSpurMemoryManagerTest >> setUp [
 	"100 k at least to put the class table in the old space.
 	Get total size be a multiple of 4K so Unicorn CPU emulator accepts it"
 	oldSpaceSize := 999 * 1024.
- 	newSpaceSize := 1 * 1024.
+ 	newSpaceSize := self newSpaceSize.
 	stackSpaceSize := 9 * 4096.
 	methodCacheSize := 4096 * self wordSize.
 	rumpCStackSize := 0.
@@ -509,31 +531,35 @@ VMSpurMemoryManagerTest >> setUp [
 
 { #category : #running }
 VMSpurMemoryManagerTest >> setUpScheduler [
-	
+
 	"The ScheduleAssocation should be initialized to a valid Processor object"
-	| processorOopAssociation processorOop processorListArray processorListPriority1 processorListPriority2 activeProcessOop |
+
+	| processorOopAssociation processorOop processorListArray processorListPriority1 processorListPriority2 |
+	"Creates the active process"
 	processorOopAssociation := self newObjectWithSlots: 2.
 	processorOop := self newObjectWithSlots: 2.
 	processorListArray := self newObjectWithSlots: 2.
-	
 	processorListPriority1 := self newObjectWithSlots: 2.
 	processorListPriority2 := self newObjectWithSlots: 2.
-	
-	memory storePointer: 0 ofObject: processorListArray withValue: processorListPriority1. 
-	memory storePointer: 1 ofObject: processorListArray withValue: processorListPriority2.
-	
+	memory
+		storePointer: 0
+		ofObject: processorListArray
+		withValue: processorListPriority1.
+	memory
+		storePointer: 1
+		ofObject: processorListArray
+		withValue: processorListPriority2.
 	memory splObj: SchedulerAssociation put: processorOopAssociation.
-	memory storePointer: ValueIndex ofObject: processorOopAssociation withValue: processorOop.
-	memory storePointer: ProcessListsIndex ofObject: processorOop withValue: processorListArray.
+	memory
+		storePointer: ValueIndex
+		ofObject: processorOopAssociation
+		withValue: processorOop.
+	memory
+		storePointer: ProcessListsIndex
+		ofObject: processorOop
+		withValue: processorListArray.
 	memory lastHash: 1.
-	
-	activeProcessOop := self newObjectWithSlots: 4 "Creates the active process".
-	memory 
-		storePointer: PriorityIndex 
-		ofObject: activeProcessOop 
-		withValue: (memory integerObjectOf: 0).
-	
-	memory memoryActiveProcess: activeProcessOop.
+	self createActiveProcess
 ]
 
 { #category : #running }
