@@ -13815,11 +13815,17 @@ StackInterpreter >> resume: aProcess preemptedYieldingIf: yieldImplicitly [
 	 causing an implicit yiled to other processes on the run queue,  otherwise
 	 add the current process to the front of its run queue, hence not yielding.
 	 Blue book behaviour is to yield implicitly but is arguably incorrect."
-	| activeProc activePriority newPriority |
+	| activeProc activePriority newPriority processLists |
 	<inline: false>
 	activeProc := self activeProcess.
 	activePriority := self quickFetchInteger: PriorityIndex ofObject: activeProc.
 	newPriority := self quickFetchInteger: PriorityIndex ofObject: aProcess.
+	"If the priority is not in the bound it cannot be added to the ready queue. 
+	We don't change the activeProcess."
+	processLists := objectMemory fetchPointer: ProcessListsIndex ofObject: self schedulerPointer.
+	(newPriority > (objectMemory  numSlotsOfAny: processLists) or:[newPriority < 1 ])
+		ifTrue: [ self primitiveFail.
+			^false  ].
 	newPriority <= activePriority ifTrue:
 		[self putToSleep: aProcess yieldingIf: true.
 		 ^false].

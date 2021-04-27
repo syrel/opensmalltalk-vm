@@ -52,3 +52,28 @@ VMProcessTests >> testLonelyProcessShouldBeActiveProcess [
 	self deny: interpreter failed.
 	self assert: oldActiveProcess equals: currentActiveProcess. 
 ]
+
+{ #category : #tests }
+VMProcessTests >> testTooHighPriorityProcessFailPrimitiveResume [
+
+	"PrimitiveResume should fail if we give higher priority than highest priority"
+	|  currentActiveProcess newProcess oldActiveProcess suspendedContext suspendedMethod |
+	
+	newProcess := self createNewProcessWithPriority: 5 asActiveProcess: false.
+	
+	suspendedContext := memory fetchPointer: SuspendedContextIndex ofObject: memory memoryActiveProcess.
+	suspendedMethod := memory fetchPointer: MethodIndex ofObject: suspendedContext.
+	
+	stackBuilder addNewFrame
+		method: suspendedMethod;
+		receiver: newProcess.
+	stackBuilder buildStack.
+	
+	oldActiveProcess := memory memoryActiveProcess.
+	interpreter primitiveResume.
+	currentActiveProcess := memory memoryActiveProcess.
+	
+	self assert: interpreter failed.
+	self assert: oldActiveProcess equals: currentActiveProcess
+ 
+]

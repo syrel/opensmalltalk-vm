@@ -61,7 +61,7 @@ VMSpurMemoryManagerTest >> createMethodOopFromPharoMethod: aPharoCompiledMethod 
 ]
 
 { #category : #running }
-VMSpurMemoryManagerTest >> createNewProcessWithPriority: anInteger asActiveProcess: aBoolean [
+VMSpurMemoryManagerTest >> createNewProcessWithPriority: anInteger asActiveProcess: isActive [
 
 	| activeProcessOop context |
 	activeProcessOop := self newObjectWithSlots: 4. "Creates the active process"
@@ -75,9 +75,10 @@ VMSpurMemoryManagerTest >> createNewProcessWithPriority: anInteger asActiveProce
 		ofObject: activeProcessOop
 		withValue: context.
 	 	
+	isActive ifTrue:[
 	interpreter instructionPointer: (memory fetchPointer: InstructionPointerIndex  ofObject: context).
 	interpreter internalizeIPandSP.
-	memory memoryActiveProcess: activeProcessOop.
+	memory memoryActiveProcess: activeProcessOop].
 		
 	^ activeProcessOop
 ]
