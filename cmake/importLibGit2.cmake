@@ -74,10 +74,10 @@ function(build_git2)
 			COMMENT "Copying Libgit binaries from '${LibGit2_BINARY_DIR}' to '${LIBRARY_OUTPUT_DIRECTORY}'" VERBATIM)
 	elseif(UNIX)
 		add_custom_target(libgit2_copy
-        	COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LibGit2_BINARY_DIR}/libgit2.1.0.1.so ${LIBRARY_OUTPUT_DIRECTORY}
-        	COMMAND ${CMAKE_COMMAND} -E create_symlink ${LIBRARY_OUTPUT_DIRECTORY}/libgit2.1.0.1.so ${LIBRARY_OUTPUT_DIRECTORY}/libgit2.1.0.so
-            COMMAND ${CMAKE_COMMAND} -E create_symlink ${LIBRARY_OUTPUT_DIRECTORY}/libgit2.1.0.1.so ${LIBRARY_OUTPUT_DIRECTORY}/libgit2.so
-            COMMAND ${CMAKE_COMMAND} -E create_symlink ${LIBRARY_OUTPUT_DIRECTORY}/libgit2.1.0.1.so ${LIBRARY_OUTPUT_DIRECTORY}/libgit2.1.0.0.so
+        	COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LibGit2_BINARY_DIR}/libgit2.so.1.0.1 ${LIBRARY_OUTPUT_DIRECTORY}
+        	COMMAND ${CMAKE_COMMAND} -E create_symlink ${LIBRARY_OUTPUT_DIRECTORY}/libgit2.so.1.0.1 ${LIBRARY_OUTPUT_DIRECTORY}/libgit2.so.1.0
+            COMMAND ${CMAKE_COMMAND} -E create_symlink ${LIBRARY_OUTPUT_DIRECTORY}/libgit2.so.1.0.1 ${LIBRARY_OUTPUT_DIRECTORY}/libgit2.so
+            COMMAND ${CMAKE_COMMAND} -E create_symlink ${LIBRARY_OUTPUT_DIRECTORY}/libgit2.so.1.0.1 ${LIBRARY_OUTPUT_DIRECTORY}/libgit2.so.1.0.0
         	COMMENT "Copying Libgit binaries from '${LibGit2_BINARY_DIR}' to '${LIBRARY_OUTPUT_DIRECTORY}'" VERBATIM)
     else()
         message(FATAL "Aggggh not implemented yet")
