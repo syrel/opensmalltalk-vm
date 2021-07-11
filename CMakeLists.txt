@@ -199,6 +199,7 @@ if(MSVC)
     get_platform_name(VM_TARGET_OS)
     message(STATUS "Building for ${VM_TARGET_OS}")
     set(CMAKE_CURRENT_SOURCE_DIR_TO_OUT ${CMAKE_CURRENT_SOURCE_DIR})
+    set(CMAKE_CURRENT_BINARY_DIR_TO_OUT ${CMAKE_CURRENT_BINARY_DIR})
 
 elseif(WIN)
     message(STATUS "Building for WINDOWS")
