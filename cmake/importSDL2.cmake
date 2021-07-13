@@ -47,8 +47,9 @@ if (BUILD_BUNDLE)
     #Download SDL2 binaries directly
     download_SDL2()
   else()
-    #Look for SDL2 in the system, then build or download if possible
-    find_system_SDL2()
+    if (PHARO_DEPENDENCIES_PREFER_SYSTEM_LIBRARIES)
+        find_system_SDL2()
+    endif()
 
     if(NOT SDL2_FOUND)
       # Only build SDL if we are in MSVC, otherwise, download

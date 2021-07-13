@@ -51,7 +51,9 @@ if(PHARO_DEPENDENCIES_PREFER_DOWNLOAD_BINARIES AND NOT(OSX AND ${CMAKE_SYSTEM_PR
   build_FFI()
 else()
   #Look for FFI in the system, then build or download if possible
-  find_system_FFI()
+  if (PHARO_DEPENDENCIES_PREFER_SYSTEM_LIBRARIES)
+    find_system_FFI()
+  endif()
   if(NOT FFI_FOUND)
     build_FFI()
   endif()

@@ -33,6 +33,7 @@ option(BUILD_BUNDLE                  "Builds a bundle with all dependencies"    
 option(FEATURE_COMPILE_GNUISATION    "Use gcc gnu extensions to compile the VM"              ON)
 option(COMPILE_EXECUTABLE            "Compiles executable"                                   ON)
 option(PHARO_DEPENDENCIES_PREFER_DOWNLOAD_BINARIES         "Prefer downloading dependencies"              OFF)
+option(PHARO_DEPENDENCIES_PREFER_SYSTEM_LIBRARIES           "Prefer linking against system dependencies"  OFF)
 option(FEATURE_COMPILE_INLINE_MEMORY_ACCESSORS             "Use inline memory accessors instead of macros" ON)
 
    set(APPNAME                      "Pharo"         CACHE STRING                 "VM Application name")
