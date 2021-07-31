@@ -120,7 +120,7 @@ message(STATUS "Compiling for architecture: ${CMAKE_SYSTEM_PROCESSOR}")
 # by it default will unwind the stack, which is not possible in generated code
 # setjmp has an extra argument not exposed in C to avoid unwinding
 # This extra asm file defines a wrapper function that sets this argument to 0
-if(MSVC AND NOT ${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+if(MSVC)
     get_filename_component(COMPILER_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
     if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "ARM64")
         set(CMAKE_ASM_MASM_COMPILER ${COMPILER_DIR}/armasm64.exe)
