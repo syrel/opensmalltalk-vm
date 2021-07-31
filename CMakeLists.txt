@@ -107,6 +107,16 @@ endif()
 #This needs to be at this point, after setting the toolchain configuration
 project(PharoVM)
 
+# Configuration
+include(CheckIncludeFiles)
+include(CheckFunctionExists)
+include(CheckSymbolExists)
+include(CheckLibraryExists)
+include(CheckTypeSize)
+include(CheckCSourceCompiles)
+include(CheckStructHasMember)
+include(ExternalProject)
+
 # Correctly set the system processor under MSVC
 # This is required because CMake will set the HOST_PROCESSOR in windows
 # And not care about our Visual Studio settings
@@ -186,16 +196,6 @@ set(PLUGIN_GENERATED_FILES
 if(FLAVOUR MATCHES "CoInterpreter")
   add_compile_definitions(ASYNC_FFI_QUEUE=1)
 endif()
-
-# Configuration
-include(CheckIncludeFiles)
-include(CheckFunctionExists)
-include(CheckSymbolExists)
-include(CheckLibraryExists)
-include(CheckTypeSize)
-include(CheckCSourceCompiles)
-include(CheckStructHasMember)
-include(ExternalProject)
 
 set(COMMON_FLAGS "")
 set(BUILD_I386_VERSION NO)
