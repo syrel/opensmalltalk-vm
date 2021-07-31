@@ -128,7 +128,7 @@ if(MSVC AND NOT ${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
     set(CMAKE_ASM_COMPILER ${CMAKE_ASM_MASM_COMPILER})
     enable_language(ASM)
 
-    set(ASM_PATH "src/utils/setjmp-Windows-wrapper-${CMAKE_SYSTEM_PROCESSOR}.s")
+    set(ASM_PATH "src/utils/setjmp-Windows-wrapper-${CMAKE_SYSTEM_PROCESSOR}.S")
 
     get_filename_component(ASM_FILENAME "${ASM_PATH}" NAME_WE)
     get_filename_component(ASM_DIRNAME "${ASM_PATH}" DIRECTORY)
@@ -151,7 +151,7 @@ if(MSVC AND NOT ${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
         )
     else()
         add_custom_command(
-            COMMAND "${CMAKE_ASM_MASM_COMPILER}" /Fo "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.obj" "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm"
+            COMMAND "${CMAKE_ASM_MASM_COMPILER}" /c /Fo "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.obj" "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm"
             DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.obj
             COMMENT "Assembling ${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm")
