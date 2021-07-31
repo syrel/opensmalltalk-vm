@@ -131,13 +131,14 @@ message(STATUS "Compiling for architecture: ${CMAKE_SYSTEM_PROCESSOR}")
 # setjmp has an extra argument not exposed in C to avoid unwinding
 # This extra asm file defines a wrapper function that sets this argument to 0
 if(MSVC)
+    enable_language(ASM_MASM)
+
     get_filename_component(COMPILER_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
     if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "ARM64")
         set(CMAKE_ASM_MASM_COMPILER ${COMPILER_DIR}/armasm64.exe)
     endif()
 
     set(CMAKE_ASM_COMPILER ${CMAKE_ASM_MASM_COMPILER})
-    enable_language(ASM)
 
     set(ASM_PATH "src/utils/setjmp-Windows-wrapper-${CMAKE_SYSTEM_PROCESSOR}.S")
 
@@ -161,12 +162,8 @@ if(MSVC)
             COMPILE_FLAGS "/safeseh"
         )
     else()
-        message(STATUS "ASM = ${ASM}")
-        message(STATUS "CMAKE_ASM_COMPILER = ${CMAKE_ASM_COMPILER}")
-        message(STATUS "ASM_MASM = ${ASM_MASM}")
-        message(STATUS "CMAKE_ASM_MASM_COMPILER = ${CMAKE_ASM_MASM_COMPILER}")
         add_custom_command(
-            COMMAND "${CMAKE_ASM_MASM_COMPILER}" /c /Fo "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.obj" "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm"
+            COMMAND "${CMAKE_ASM_MASM_COMPILER}" /Fo "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.obj" /c "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm"
             DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.obj
             COMMENT "Assembling ${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm using ${CMAKE_ASM_MASM_COMPILER}")
