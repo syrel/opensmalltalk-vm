@@ -151,6 +151,10 @@ if(MSVC)
             COMPILE_FLAGS "/safeseh"
         )
     else()
+        message(STATUS "ASM = ${ASM}")
+        message(STATUS "CMAKE_ASM_COMPILER = ${CMAKE_ASM_COMPILER}")
+        message(STATUS "ASM_MASM = ${ASM_MASM}")
+        message(STATUS "CMAKE_ASM_MASM_COMPILER = ${CMAKE_ASM_MASM_COMPILER}")
         add_custom_command(
             COMMAND "${CMAKE_ASM_MASM_COMPILER}" /c /Fo "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.obj" "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm"
             DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm
