@@ -50,7 +50,7 @@ set(PLUGIN_GENERATED_FILES
 if(GENERATE_SOURCES)
 
     #Setting platform specific vmmaker virtual machine, with cached download or override
-    if (GENERATE_PHARO_VM) 
+    if (NOT "${GENERATE_PHARO_VM}" STREQUAL "")
         message("Overriding VM used for code generation")  
         set(VMMAKER_VM ${GENERATE_PHARO_VM})
         # add empty target because is required later when installing vmmaker
@@ -95,15 +95,27 @@ if(GENERATE_SOURCES)
             )
     endif()
 
-    #Bootstrap VMMaker.image from downloaded image
-    ExternalProject_Add(
+    if(NOT "${GENERATE_PHARO_IMAGE}" STREQUAL "")
+        add_custom_command(
+            OUTPUT build_vmmaker_save_image
+            COMMAND ${VMMAKER_VM} --headless ${GENERATE_PHARO_IMAGE} save "${VMMAKER_DIR}/image/VMMaker"
+            DEPENDS build_vmmaker_get_vm-build
+            COMMENT "Saving VMMaker image: ${VMMAKER_DIR}/image/VMMaker from ${GENERATE_PHARO_IMAGE}")
+        add_custom_command(
+            OUTPUT build_vmmaker_get_image
+            COMMAND ${VMMAKER_VM} --headless ${VMMAKER_IMAGE} --save --quit "${CMAKE_CURRENT_SOURCE_DIR_TO_OUT}/scripts/installVMMaker.st" "${CMAKE_CURRENT_SOURCE_DIR_TO_OUT}" "${ICEBERG_DEFAULT_REMOTE}"
+            DEPENDS build_vmmaker_save_image
+            COMMENT "Installing VMMaker in ${VMMAKER_IMAGE}")
+    else()
+        #Bootstrap VMMaker.image from downloaded image
+        ExternalProject_Add(
             build_vmmaker_get_image
 
             URL https://files.pharo.org/image/90/Pharo9.0-SNAPSHOT.build.1144.sha.ac4bf08.arch.64bit.zip
             URL_HASH SHA256=eac7c9a2387bc9a44ff2572b7dbd9fddd544d391787a05e5181baded7aab6f45
             BUILD_COMMAND ${VMMAKER_VM} --headless ${VMMAKER_DIR}/image/Pharo9.0-SNAPSHOT-64bit-ac4bf08.image save VMMaker
             COMMAND ${VMMAKER_VM} --headless ${VMMAKER_IMAGE} --save --quit "${CMAKE_CURRENT_SOURCE_DIR_TO_OUT}/scripts/installVMMaker.st" "${CMAKE_CURRENT_SOURCE_DIR_TO_OUT}" "${ICEBERG_DEFAULT_REMOTE}"
-            UPDATE_COMMAND      echo 
+            UPDATE_COMMAND      echo
             CONFIGURE_COMMAND   echo
             INSTALL_COMMAND     echo
 
@@ -112,8 +124,8 @@ if(GENERATE_SOURCES)
             BUILD_IN_SOURCE True
             WORKING_DIRECTORY "${VMMAKER_DIR}"
 
-            DEPENDS build_vmmaker_get_vm-build
-            )
+            DEPENDS build_vmmaker_get_vm-build)
+    endif()
 
     #Custom command that generates the vm source code from VMMaker into "out/build/XXXX/generated" folder
     add_custom_command(

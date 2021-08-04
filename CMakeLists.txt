@@ -40,7 +40,8 @@ option(FEATURE_COMPILE_INLINE_MEMORY_ACCESSORS             "Use inline memory ac
    set(FLAVOUR                      "CoInterpreter" CACHE STRING                 "The kind of VM to generate. Possible values: StackVM, CoInterpreter")
    set(PHARO_LIBRARY_PATH           "@executable_path/Plugins" CACHE STRING      "The RPATH to use in the build")
    set(ICEBERG_DEFAULT_REMOTE       "scpUrl"        CACHE STRING                 "If Iceberg uses HTTPS (httpsUrl) or tries first with SSH (scpUrl)")
-
+   set(GENERATE_PHARO_VM            ""              CACHE STRING                 "Specify a path to the VM executable to use for the VMMaker. If not specified, the VM will be downloaded")
+   set(GENERATE_PHARO_IMAGE         ""              CACHE STRING                 "Specify a path to the .image to use for the VMMaker. If not specified, the VM will be downloaded")
 
 # Visual Studio stores user build settings in file 'CmakeSettings.json'.  We would like to manage that via a project template.
 # To push out new template, update 'template_uuid' field in 'template_file' with value from https://www.uuidgenerator.net/
