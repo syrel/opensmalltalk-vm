@@ -96,15 +96,25 @@ if(GENERATE_SOURCES)
     endif()
 
     if(NOT "${GENERATE_PHARO_IMAGE}" STREQUAL "")
-        add_custom_command(
-            OUTPUT build_vmmaker_save_image
+        add_custom_target(
+            build_vmmaker_save_image
             COMMAND ${VMMAKER_VM} --headless ${GENERATE_PHARO_IMAGE} save "${VMMAKER_DIR}/image/VMMaker"
             DEPENDS build_vmmaker_get_vm-build
             COMMENT "Saving VMMaker image: ${VMMAKER_DIR}/image/VMMaker from ${GENERATE_PHARO_IMAGE}")
-        add_custom_command(
-            OUTPUT build_vmmaker_get_image
-            COMMAND ${VMMAKER_VM} --headless ${VMMAKER_IMAGE} --save --quit "${CMAKE_CURRENT_SOURCE_DIR_TO_OUT}/scripts/installVMMaker.st" "${CMAKE_CURRENT_SOURCE_DIR_TO_OUT}" "${ICEBERG_DEFAULT_REMOTE}"
+        get_filename_component(GENERATE_PHARO_IMAGE_DIRECTORY ${GENERATE_PHARO_IMAGE} DIRECTORY)
+
+        file(GLOB GENERATE_PHARO_IMAGE_SOURCES "${GENERATE_PHARO_IMAGE_DIRECTORY}/*.sources")
+
+        add_custom_target(
+            build_vmmaker_copy_sources
+            COMMAND ${CMAKE_COMMAND} -E copy ${GENERATE_PHARO_IMAGE_SOURCES} "${VMMAKER_DIR}/image/"
             DEPENDS build_vmmaker_save_image
+            COMMENT "Copy sources to the VMMaker ${GENERATE_PHARO_IMAGE_SOURCES}")
+
+        add_custom_target(
+            build_vmmaker_get_image
+            COMMAND ${VMMAKER_VM} --headless ${VMMAKER_IMAGE} --save --quit "${CMAKE_CURRENT_SOURCE_DIR_TO_OUT}/scripts/installVMMaker.st" "${CMAKE_CURRENT_SOURCE_DIR_TO_OUT}" "${ICEBERG_DEFAULT_REMOTE}"
+            DEPENDS build_vmmaker_copy_sources
             COMMENT "Installing VMMaker in ${VMMAKER_IMAGE}")
     else()
         #Bootstrap VMMaker.image from downloaded image
