@@ -26,7 +26,9 @@ option(GENERATE_SOURCES									"If it generates the sources"												 ON)
 option(ALWAYS_INTERACTIVE								"Be interactive by default"													OFF)
 option(BUILD_BUNDLE										"Builds a bundle with all dependencies"										 ON)
 option(FEATURE_COMPILE_GNUISATION						"Use gcc gnu extensions to compile the VM"									 ON)
-option(PHARO_DEPENDENCIES_PREFER_DOWNLOAD_BINARIES		"Prefer downloading dependencies"											OFF)
+option(COMPILE_EXECUTABLE                               "Compiles executable"                                                        ON)
+option(PHARO_DEPENDENCIES_PREFER_DOWNLOAD_BINARIES      "Prefer downloading dependencies"                                           OFF)
+option(PHARO_DEPENDENCIES_PREFER_SYSTEM_LIBRARIES       "Prefer linking against system dependencies"                                OFF)
 option(FEATURE_COMPILE_INLINE_MEMORY_ACCESSORS			"Use inline memory accessors instead of macros"								 ON)
 option(PHARO_VM_IN_WORKER_THREAD						"Have support for pharo running in a different thread that the main one"	 ON)
 option(BUILD_IS_RELEASE									"Is this a release version?"												OFF)
@@ -35,6 +37,8 @@ set(APPNAME						"Pharo"         CACHE STRING                 "VM Application na
 set(FLAVOUR						"CoInterpreter" CACHE STRING                 "The kind of VM to generate. Possible values: StackVM, CoInterpreter")
 set(PHARO_LIBRARY_PATH			"@executable_path/Plugins" CACHE STRING      "The RPATH to use in the build")
 set(ICEBERG_DEFAULT_REMOTE		"scpUrl"        CACHE STRING                 "If Iceberg uses HTTPS (httpsUrl) or tries first with SSH (scpUrl)")
+set(GENERATE_PHARO_VM            ""              CACHE STRING                 "Specify a path to the VM executable to use for the VMMaker. If not specified, the VM will be downloaded")
+set(GENERATE_PHARO_IMAGE         ""              CACHE STRING                 "Specify a path to the .image to use for the VMMaker. If not specified, the VM will be downloaded")
 
 # Extract VCS information
 include(cmake/versionExtraction.cmake)
@@ -126,7 +130,9 @@ message(STATUS "Compiling for architecture: ${CMAKE_SYSTEM_PROCESSOR}")
 # by it default will unwind the stack, which is not possible in generated code
 # setjmp has an extra argument not exposed in C to avoid unwinding
 # This extra asm file defines a wrapper function that sets this argument to 0
-if(MSVC AND NOT ${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+if(MSVC)
+    enable_language(ASM_MASM)
+
     get_filename_component(COMPILER_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
     if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "ARM64")
         set(CMAKE_ASM_MASM_COMPILER ${COMPILER_DIR}/armasm64.exe)
@@ -157,10 +163,10 @@ if(MSVC AND NOT ${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
         )
     else()
         add_custom_command(
-            COMMAND "${CMAKE_ASM_MASM_COMPILER}" /Fo "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.obj" "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm"
+            COMMAND "${CMAKE_ASM_MASM_COMPILER}" /Fo "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.obj" /c "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm"
             DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.obj
-            COMMENT "Assembling ${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm")
+            COMMENT "Assembling ${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm using ${CMAKE_ASM_MASM_COMPILER}")
 
         set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.obj PROPERTIES EXTERNAL_OBJECT TRUE)
 
@@ -206,12 +212,8 @@ if(MSVC)
     get_platform_name(VM_TARGET_OS)
     message(STATUS "Building for ${VM_TARGET_OS}")
     set(CMAKE_CURRENT_SOURCE_DIR_TO_OUT ${CMAKE_CURRENT_SOURCE_DIR})
-    
-    # Define WIN32_LEAN_AND_MEAN to exclude APIs such as Cryptography, DDE, RPC, Shell, and Windows Sockets
-    # They can be included if needed
-    # https://docs.microsoft.com/en-us/windows/win32/winprog/using-the-windows-headers
-    add_compile_definitions(WIN32_LEAN_AND_MEAN)
-    
+    set(CMAKE_CURRENT_BINARY_DIR_TO_OUT ${CMAKE_CURRENT_BINARY_DIR})
+
 elseif(WIN)
     message(STATUS "Building for WINDOWS")
 
@@ -258,7 +260,7 @@ elseif(UNIX)
     set(CMAKE_CURRENT_SOURCE_DIR_TO_OUT ${CMAKE_CURRENT_SOURCE_DIR})
     set(CMAKE_CURRENT_BINARY_DIR_TO_OUT ${CMAKE_CURRENT_BINARY_DIR})
 
-    set(COMMON_FLAGS "-O2 -Wall -Werror=implicit-function-declaration")
+    set(COMMON_FLAGS "-O2 -Wall")
 
     add_compile_definitions(LSB_FIRST=1)
 
@@ -303,13 +305,7 @@ add_compile_definitions("VM_LABEL\(foo\)=0")
 string(LENGTH "${CMAKE_SOURCE_DIR}/" SOURCE_PATH_SIZE)
 add_compile_definitions("SOURCE_PATH_SIZE=${SOURCE_PATH_SIZE}")
 
-if(UNIX AND NOT OSX AND NOT WIN)
-    set(VM_EXECUTABLE_NAME pharo CACHE STRING "VM Executable name")
-else()
-    set(VM_EXECUTABLE_NAME Pharo CACHE STRING "VM Executable name")
-endif()
-
-message(STATUS "Building ${APPNAME} with executable named ${VM_EXECUTABLE_NAME}")
+message(STATUS "Building ${APPNAME}")
 
 set(VM_LIBRARY_NAME ${APPNAME}VMCore)
 set(VM_NAME ${APPNAME})
@@ -344,18 +340,24 @@ elseif("${SIZEOF_LONG_LONG}" STREQUAL "8")
 else()
 	message(FATAL_ERROR "Failed to find a 64 bits integer type.")
 endif()
-
-set(EXECUTABLE_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/build/vm/")
-
-#If in OSX, configure creation of Bundle
-if (OSX)
-  set(EXECUTABLE_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/build/vm/Debug")
-  set(RUNTIME_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/build/vm/")
-  set(LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/build/vm/Debug/${VM_EXECUTABLE_NAME}.app/Contents/MacOS/Plugins")
-else()
-  set(LIBRARY_OUTPUT_DIRECTORY ${EXECUTABLE_OUTPUT_PATH})
+ 
+# Detect a location to which libraries should be built. The target location depends on whether we want to build an executable or not.
+set(LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/build/vm/")
+if (COMPILE_EXECUTABLE)
+  set(EXECUTABLE_OUTPUT_PATH ${LIBRARY_OUTPUT_DIRECTORY})
+  
+  if(UNIX AND NOT OSX AND NOT WIN)
+      set(VM_EXECUTABLE_NAME pharo CACHE STRING "VM Executable name")
+  else()
+      set(VM_EXECUTABLE_NAME Pharo CACHE STRING "VM Executable name")
+  endif()
+  # If in OSX, configure creation of Bundle
+  if (OSX)
+    set(EXECUTABLE_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/build/vm/Debug")
+    set(LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/build/vm/Debug/${VM_EXECUTABLE_NAME}.app/Contents/MacOS/Plugins")
+  endif()
 endif()
-set(LIBRARY_OUTPUT_PATH ${LIBRARY_OUTPUT_DIRECTORY})
+
 message(STATUS "Writing libraries to: ${LIBRARY_OUTPUT_DIRECTORY}")
 
 #make_directory(${LIBRARY_OUTPUT_PATH})
@@ -455,8 +457,8 @@ set(VM_SOURCES
     ${EXTRACTED_SOURCES}
 )
 
-add_executable(${VM_EXECUTABLE_NAME} ${VM_FRONTEND_APPLICATION_TYPE} ${VM_FRONTEND_SOURCES})
 addLibraryWithRPATH(${VM_LIBRARY_NAME} ${VM_SOURCES})
+add_custom_command(TARGET ${VM_LIBRARY_NAME} PRE_BUILD COMMAND ${CMAKE_COMMAND} -E make_directory ${LIBRARY_OUTPUT_DIRECTORY})
 
 #
 # LibFFI
@@ -489,18 +491,6 @@ if (${FEATURE_FFI})
 endif()
 
 
-#If in OSX, configure creation of Bundle
-if(OSX)
-  set_target_properties(
-    ${VM_EXECUTABLE_NAME}
-    PROPERTIES
-    MACOSX_BUNDLE YES
-    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/resources/mac/Info.plist.in"
-  )
-endif()
-
-target_link_libraries(${VM_EXECUTABLE_NAME} ${VM_LIBRARY_NAME})
-
 add_required_libs_per_platform()
 
 include(plugins.cmake)
@@ -510,6 +500,6 @@ add_subdirectory(ffiTestLibrary ${CMAKE_CURRENT_BINARY_DIR}/build/ffiTestLibrary
 # Handling Third party dependencies
 add_third_party_dependencies_per_platform()
 
-# Packaging Setup
-
-include(cmake/packaging.cmake)
+if(COMPILE_EXECUTABLE)
+  include(cmake/executable.cmake)
+endif()
