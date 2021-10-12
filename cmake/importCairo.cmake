@@ -1,4 +1,5 @@
 if (BUILD_BUNDLE)
+
   # Cairo does not support building on CMake
   if (WIN)
     If(${CMAKE_SYSTEM_PROCESSOR} MATCHES "ARM64")
