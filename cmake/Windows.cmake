@@ -2,8 +2,6 @@ set(WIN 1)
 
 set(VM_VERSION_FILEVERSION "${APPNAME}VM-${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}-${GIT_COMMIT_HASH}")
 
-include_directories(PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/resources/windows)
-
 function(add_platform_headers)
     target_include_directories(${VM_LIBRARY_NAME}
     PUBLIC
@@ -35,6 +33,8 @@ if(COMPILE_EXECUTABLE)
     set(VM_EXECUTABLE_CONSOLE_NAME "${VM_EXECUTABLE_NAME}Console")
     set(Win32ResourcesFolder "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows")
 
+    include_directories(PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/resources/windows)
+
     if(${CYGWIN})
       # transform the path into a windows path with unix backslashes C:/bla/blu
       # this is the path required to send as argument to libraries outside of the control of cygwin (like pharo itself)
@@ -56,6 +56,9 @@ if(COMPILE_EXECUTABLE)
     set(Win32Manifest "${CMAKE_CURRENT_BINARY_DIR}/${VM_EXECUTABLE_NAME}.exe.manifest")
     set(Win32ConsoleManifest "${CMAKE_CURRENT_BINARY_DIR}/${VM_EXECUTABLE_CONSOLE_NAME}.exe.manifest")
 
+    # Resource with DLL version info.
+    list(APPEND EXTRACTED_SOURCES ${Win32DLLResource})
+
     set(VM_FRONTEND_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/src/win32Main.c
         ${Win32Resource})
@@ -63,9 +66,6 @@ if(COMPILE_EXECUTABLE)
     set(VM_CONSOLE_FRONTEND_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/src/unixMain.c
         ${Win32ConsoleResource})
-
-    # Resource with DLL version info.
-    list(APPEND ${EXTRACTED_SOURCES} ${Win32DLLResource})
 
     set(VM_FRONTEND_APPLICATION_TYPE WIN32)
 

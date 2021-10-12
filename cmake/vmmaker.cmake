@@ -50,7 +50,7 @@ set(PLUGIN_GENERATED_FILES
 if(GENERATE_SOURCES)
 
     #Setting platform specific vmmaker virtual machine, with cached download or override
-    if (GENERATE_PHARO_VM) 
+    if (NOT "${GENERATE_PHARO_VM}" STREQUAL "")
         message("Overriding VM used for code generation")  
         set(VMMAKER_VM ${GENERATE_PHARO_VM})
         # add empty target because is required later when installing vmmaker

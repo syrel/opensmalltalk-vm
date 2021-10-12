@@ -137,10 +137,10 @@ if(MSVC)
     if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "ARM64")
         set(CMAKE_ASM_MASM_COMPILER ${COMPILER_DIR}/armasm64.exe)
     endif()
-    set(CMAKE_ASM_COMPILER ${CMAKE_ASM_MASM_COMPILER})
-    enable_language(ASM)
 
-    set(ASM_PATH "src/utils/setjmp-Windows-wrapper-${CMAKE_SYSTEM_PROCESSOR}.s")
+    set(CMAKE_ASM_COMPILER ${CMAKE_ASM_MASM_COMPILER})
+
+    set(ASM_PATH "src/utils/setjmp-Windows-wrapper-${CMAKE_SYSTEM_PROCESSOR}.S")
 
     get_filename_component(ASM_FILENAME "${ASM_PATH}" NAME_WE)
     get_filename_component(ASM_DIRNAME "${ASM_PATH}" DIRECTORY)
