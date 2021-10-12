@@ -11,37 +11,46 @@ cmake_policy(SET CMP0053 NEW)
 
 include(macros.cmake)
 
-set(VERSION_MAJOR 9)
-set(VERSION_MINOR 0)
-set(VERSION_PATCH 1)
-
-message("CMAKE_GENERATOR=${CMAKE_GENERATOR}")
+message(STATUS "CMAKE_GENERATOR=${CMAKE_GENERATOR}")
 
 # Build options
-option(FEATURE_FFI                   "Enable FFI"                                            ON)
-option(FEATURE_THREADED_FFI          "Enable Threaded (running in another thread) FFI"       ON)
-option(FEATURE_NETWORK               "Enable network and sockets"                            ON)
-option(FEATURE_LIB_SDL2              "Build SDL2 support"                                    ON)
-option(FEATURE_LIB_CAIRO             "Build Cairo support"                                   ON)
-option(FEATURE_LIB_FREETYPE2         "Build freetype2 support"                               ON)
-option(FEATURE_LIB_GIT2              "Build LibGit2 support"                                 ON)
-# PTHREADW32_DIR should be set to the location of the PTHREADW32
-option(FEATURE_LIB_PTHREADW32        "Windows only, link to win32 version of pthread"       OFF)
-option(GENERATE_SOURCES              "If it generates the sources"                           ON)
-option(ALWAYS_INTERACTIVE            "Be interactive by default"                            OFF)
-option(BUILD_BUNDLE                  "Builds a bundle with all dependencies"                 ON)
-option(FEATURE_COMPILE_GNUISATION    "Use gcc gnu extensions to compile the VM"              ON)
-option(COMPILE_EXECUTABLE            "Compiles executable"                                   ON)
-option(PHARO_DEPENDENCIES_PREFER_DOWNLOAD_BINARIES         "Prefer downloading dependencies"              OFF)
-option(PHARO_DEPENDENCIES_PREFER_SYSTEM_LIBRARIES           "Prefer linking against system dependencies"  OFF)
-option(FEATURE_COMPILE_INLINE_MEMORY_ACCESSORS             "Use inline memory accessors instead of macros" ON)
+option(FEATURE_FFI										"Enable FFI"																 ON)
+option(FEATURE_THREADED_FFI								"Enable Threaded (running in another thread) FFI"							 ON)
+option(FEATURE_NETWORK									"Enable network and sockets"												 ON)
+option(FEATURE_LIB_SDL2									"Build SDL2 support"														 ON)
+option(FEATURE_LIB_CAIRO								"Build Cairo support"														 ON)
+option(FEATURE_LIB_FREETYPE2							"Build freetype2 support"													 ON)
+option(FEATURE_LIB_GIT2									"Build LibGit2 support"														 ON)
+option(FEATURE_LIB_PTHREADW32							"Windows only, link to win32 version of pthread"							OFF)
+option(GENERATE_SOURCES									"If it generates the sources"												 ON)
+option(ALWAYS_INTERACTIVE								"Be interactive by default"													OFF)
+option(BUILD_BUNDLE										"Builds a bundle with all dependencies"										 ON)
+option(FEATURE_COMPILE_GNUISATION						"Use gcc gnu extensions to compile the VM"									 ON)
+option(PHARO_DEPENDENCIES_PREFER_DOWNLOAD_BINARIES		"Prefer downloading dependencies"											OFF)
+option(FEATURE_COMPILE_INLINE_MEMORY_ACCESSORS			"Use inline memory accessors instead of macros"								 ON)
+option(PHARO_VM_IN_WORKER_THREAD						"Have support for pharo running in a different thread that the main one"	 ON)
+option(BUILD_IS_RELEASE									"Is this a release version?"												OFF)
 
-   set(APPNAME                      "Pharo"         CACHE STRING                 "VM Application name")
-   set(FLAVOUR                      "CoInterpreter" CACHE STRING                 "The kind of VM to generate. Possible values: StackVM, CoInterpreter")
-   set(PHARO_LIBRARY_PATH           "@executable_path/Plugins" CACHE STRING      "The RPATH to use in the build")
-   set(ICEBERG_DEFAULT_REMOTE       "scpUrl"        CACHE STRING                 "If Iceberg uses HTTPS (httpsUrl) or tries first with SSH (scpUrl)")
-   set(GENERATE_PHARO_VM            ""              CACHE STRING                 "Specify a path to the VM executable to use for the VMMaker. If not specified, the VM will be downloaded")
-   set(GENERATE_PHARO_IMAGE         ""              CACHE STRING                 "Specify a path to the .image to use for the VMMaker. If not specified, the VM will be downloaded")
+set(APPNAME						"Pharo"         CACHE STRING                 "VM Application name")
+set(FLAVOUR						"CoInterpreter" CACHE STRING                 "The kind of VM to generate. Possible values: StackVM, CoInterpreter")
+set(PHARO_LIBRARY_PATH			"@executable_path/Plugins" CACHE STRING      "The RPATH to use in the build")
+set(ICEBERG_DEFAULT_REMOTE		"scpUrl"        CACHE STRING                 "If Iceberg uses HTTPS (httpsUrl) or tries first with SSH (scpUrl)")
+
+# Extract VCS information
+include(cmake/versionExtraction.cmake)
+extractVCSInformation(GIT_COMMIT_HASH GIT_DESCRIBE GIT_COMMIT_DATE)
+
+set(VERSION_MAJOR 9)
+set(VERSION_MINOR 0)
+set(VERSION_PATCH_NUMBER 10)
+
+if(BUILD_IS_RELEASE)
+	set(VERSION_PATCH "${VERSION_PATCH_NUMBER}")
+else()
+	set(VERSION_PATCH "${VERSION_PATCH_NUMBER}-${GIT_COMMIT_HASH}")
+endif(BUILD_IS_RELEASE)
+
+message(STATUS "Building version ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}")
 
 # Visual Studio stores user build settings in file 'CmakeSettings.json'.  We would like to manage that via a project template.
 # To push out new template, update 'template_uuid' field in 'template_file' with value from https://www.uuidgenerator.net/
@@ -60,26 +69,22 @@ if(EXISTS "${user_file}")
     set(template_uuid ${CMAKE_MATCH_1})
 
     if("${user_uuid}" STREQUAL "${template_uuid}")
-        message("Project build settings unchanged (${template_file})")
+        message(STATUS "Project build settings unchanged (${template_file})")
     else()
-        message("NOTICE!! Project template build settings have changed.")
-        message("NOTICE!! Back up your user build settings (${user_file})")
-        message("NOTICE!! and replace whole file with project template build settings (${template_file}).")
-        message("NOTICE!! Then restore parts of your user settings as you require.")
+        message(STATUS "NOTICE!! Project template build settings have changed.")
+        message(STATUS "NOTICE!! Back up your user build settings (${user_file})")
+        message(STATUS "NOTICE!! and replace whole file with project template build settings (${template_file}).")
+        message(STATUS "NOTICE!! Then restore parts of your user settings as you require.")
         message(FATAL_ERROR "Read output NOTICES!!")
     endif()
 else()
-    message("No user build settings.")
+    message(STATUS "No user build settings.")
 endif()
 
 # BUILD VM
 
 # Configure CMake to load our modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
-# Extract VCS information
-include(cmake/versionExtraction.cmake)
-extractVCSInformation(GIT_COMMIT_HASH GIT_DESCRIBE GIT_COMMIT_DATE)
 
 #Variable used to set the VM date
 set(BUILT_FROM "${GIT_DESCRIBE} - Commit: ${GIT_COMMIT_HASH} - Date: ${GIT_COMMIT_DATE}")
@@ -108,16 +113,6 @@ endif()
 #This needs to be at this point, after setting the toolchain configuration
 project(PharoVM)
 
-# Configuration
-include(CheckIncludeFiles)
-include(CheckFunctionExists)
-include(CheckSymbolExists)
-include(CheckLibraryExists)
-include(CheckTypeSize)
-include(CheckCSourceCompiles)
-include(CheckStructHasMember)
-include(ExternalProject)
-
 # Correctly set the system processor under MSVC
 # This is required because CMake will set the HOST_PROCESSOR in windows
 # And not care about our Visual Studio settings
@@ -131,17 +126,15 @@ message(STATUS "Compiling for architecture: ${CMAKE_SYSTEM_PROCESSOR}")
 # by it default will unwind the stack, which is not possible in generated code
 # setjmp has an extra argument not exposed in C to avoid unwinding
 # This extra asm file defines a wrapper function that sets this argument to 0
-if(MSVC)
-    enable_language(ASM_MASM)
-
+if(MSVC AND NOT ${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
     get_filename_component(COMPILER_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
     if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "ARM64")
         set(CMAKE_ASM_MASM_COMPILER ${COMPILER_DIR}/armasm64.exe)
     endif()
-
     set(CMAKE_ASM_COMPILER ${CMAKE_ASM_MASM_COMPILER})
+    enable_language(ASM)
 
-    set(ASM_PATH "src/utils/setjmp-Windows-wrapper-${CMAKE_SYSTEM_PROCESSOR}.S")
+    set(ASM_PATH "src/utils/setjmp-Windows-wrapper-${CMAKE_SYSTEM_PROCESSOR}.s")
 
     get_filename_component(ASM_FILENAME "${ASM_PATH}" NAME_WE)
     get_filename_component(ASM_DIRNAME "${ASM_PATH}" DIRECTORY)
@@ -164,10 +157,10 @@ if(MSVC)
         )
     else()
         add_custom_command(
-            COMMAND "${CMAKE_ASM_MASM_COMPILER}" /Fo "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.obj" /c "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm"
+            COMMAND "${CMAKE_ASM_MASM_COMPILER}" /Fo "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.obj" "${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm"
             DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.obj
-            COMMENT "Assembling ${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm using ${CMAKE_ASM_MASM_COMPILER}")
+            COMMENT "Assembling ${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.asm")
 
         set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/${ASM_FILENAME}.obj PROPERTIES EXTERNAL_OBJECT TRUE)
 
@@ -195,6 +188,16 @@ if(FLAVOUR MATCHES "CoInterpreter")
   add_compile_definitions(ASYNC_FFI_QUEUE=1)
 endif()
 
+# Configuration
+include(CheckIncludeFiles)
+include(CheckFunctionExists)
+include(CheckSymbolExists)
+include(CheckLibraryExists)
+include(CheckTypeSize)
+include(CheckCSourceCompiles)
+include(CheckStructHasMember)
+include(ExternalProject)
+
 set(COMMON_FLAGS "")
 set(BUILD_I386_VERSION NO)
 
@@ -203,8 +206,12 @@ if(MSVC)
     get_platform_name(VM_TARGET_OS)
     message(STATUS "Building for ${VM_TARGET_OS}")
     set(CMAKE_CURRENT_SOURCE_DIR_TO_OUT ${CMAKE_CURRENT_SOURCE_DIR})
-    set(CMAKE_CURRENT_BINARY_DIR_TO_OUT ${CMAKE_CURRENT_BINARY_DIR})
-
+    
+    # Define WIN32_LEAN_AND_MEAN to exclude APIs such as Cryptography, DDE, RPC, Shell, and Windows Sockets
+    # They can be included if needed
+    # https://docs.microsoft.com/en-us/windows/win32/winprog/using-the-windows-headers
+    add_compile_definitions(WIN32_LEAN_AND_MEAN)
+    
 elseif(WIN)
     message(STATUS "Building for WINDOWS")
 
@@ -251,7 +258,7 @@ elseif(UNIX)
     set(CMAKE_CURRENT_SOURCE_DIR_TO_OUT ${CMAKE_CURRENT_SOURCE_DIR})
     set(CMAKE_CURRENT_BINARY_DIR_TO_OUT ${CMAKE_CURRENT_BINARY_DIR})
 
-    set(COMMON_FLAGS "-O2 -Wall")
+    set(COMMON_FLAGS "-O2 -Wall -Werror=implicit-function-declaration")
 
     add_compile_definitions(LSB_FIRST=1)
 
@@ -296,7 +303,13 @@ add_compile_definitions("VM_LABEL\(foo\)=0")
 string(LENGTH "${CMAKE_SOURCE_DIR}/" SOURCE_PATH_SIZE)
 add_compile_definitions("SOURCE_PATH_SIZE=${SOURCE_PATH_SIZE}")
 
-message(STATUS "Building ${APPNAME}")
+if(UNIX AND NOT OSX AND NOT WIN)
+    set(VM_EXECUTABLE_NAME pharo CACHE STRING "VM Executable name")
+else()
+    set(VM_EXECUTABLE_NAME Pharo CACHE STRING "VM Executable name")
+endif()
+
+message(STATUS "Building ${APPNAME} with executable named ${VM_EXECUTABLE_NAME}")
 
 set(VM_LIBRARY_NAME ${APPNAME}VMCore)
 set(VM_NAME ${APPNAME})
@@ -331,25 +344,21 @@ elseif("${SIZEOF_LONG_LONG}" STREQUAL "8")
 else()
 	message(FATAL_ERROR "Failed to find a 64 bits integer type.")
 endif()
- 
-# Detect a location to which libraries should be built. The target location depends on whether we want to build an executable or not.
-set(LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/build/vm/")
-if (COMPILE_EXECUTABLE)
-  set(EXECUTABLE_OUTPUT_PATH ${LIBRARY_OUTPUT_DIRECTORY})
-  
-  if(UNIX AND NOT OSX AND NOT WIN)
-      set(VM_EXECUTABLE_NAME pharo CACHE STRING "VM Executable name")
-  else()
-      set(VM_EXECUTABLE_NAME Pharo CACHE STRING "VM Executable name")
-  endif()
-  # If in OSX, configure creation of Bundle
-  if (OSX)
-    set(EXECUTABLE_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/build/vm/Debug")
-    set(LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/build/vm/Debug/${VM_EXECUTABLE_NAME}.app/Contents/MacOS/Plugins")
-  endif()
-endif()
 
+set(EXECUTABLE_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/build/vm/")
+
+#If in OSX, configure creation of Bundle
+if (OSX)
+  set(EXECUTABLE_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/build/vm/Debug")
+  set(RUNTIME_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/build/vm/")
+  set(LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/build/vm/Debug/${VM_EXECUTABLE_NAME}.app/Contents/MacOS/Plugins")
+else()
+  set(LIBRARY_OUTPUT_DIRECTORY ${EXECUTABLE_OUTPUT_PATH})
+endif()
+set(LIBRARY_OUTPUT_PATH ${LIBRARY_OUTPUT_DIRECTORY})
 message(STATUS "Writing libraries to: ${LIBRARY_OUTPUT_DIRECTORY}")
+
+#make_directory(${LIBRARY_OUTPUT_PATH})
 
 check_include_files(dirent.h HAVE_DIRENT_H)
 check_include_files(features.h HAVE_FEATURES_H)
@@ -446,8 +455,8 @@ set(VM_SOURCES
     ${EXTRACTED_SOURCES}
 )
 
+add_executable(${VM_EXECUTABLE_NAME} ${VM_FRONTEND_APPLICATION_TYPE} ${VM_FRONTEND_SOURCES})
 addLibraryWithRPATH(${VM_LIBRARY_NAME} ${VM_SOURCES})
-add_custom_command(TARGET ${VM_LIBRARY_NAME} PRE_BUILD COMMAND ${CMAKE_COMMAND} -E make_directory ${LIBRARY_OUTPUT_DIRECTORY})
 
 #
 # LibFFI
@@ -480,6 +489,18 @@ if (${FEATURE_FFI})
 endif()
 
 
+#If in OSX, configure creation of Bundle
+if(OSX)
+  set_target_properties(
+    ${VM_EXECUTABLE_NAME}
+    PROPERTIES
+    MACOSX_BUNDLE YES
+    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/resources/mac/Info.plist.in"
+  )
+endif()
+
+target_link_libraries(${VM_EXECUTABLE_NAME} ${VM_LIBRARY_NAME})
+
 add_required_libs_per_platform()
 
 include(plugins.cmake)
@@ -489,6 +510,6 @@ add_subdirectory(ffiTestLibrary ${CMAKE_CURRENT_BINARY_DIR}/build/ffiTestLibrary
 # Handling Third party dependencies
 add_third_party_dependencies_per_platform()
 
-if(COMPILE_EXECUTABLE)
-  include(cmake/executable.cmake)
-endif()
+# Packaging Setup
+
+include(cmake/packaging.cmake)
