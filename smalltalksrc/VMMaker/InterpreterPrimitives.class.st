@@ -71,7 +71,6 @@ Class {
 		'primFailCode',
 		'osErrorCode',
 		'exceptionPC',
-		'inFFIFlags',
 		'profileMethod',
 		'profileProcess',
 		'profileSemaphore',
@@ -112,7 +111,7 @@ InterpreterPrimitives class >> defineAtCompileTime: anObject [
 	 because the VM generated is specific to these varables."
 	anObject isSymbol ifFalse:
 		[^false].
-	(#(STACKVM COGVM COGMTVM SPURVM) includes: anObject) ifTrue:
+	(#(STACKVM COGVM SPURVM) includes: anObject) ifTrue:
 		[^false].
 	^VMBasicConstants namesDefinedAtCompileTime includes: anObject
 ]
@@ -1718,31 +1717,6 @@ InterpreterPrimitives >> primitiveFailFor: reasonCode [
 	 N.B. primitiveFailFor: PrimNoErr is expected to clear the primFailCode."
 	<api>
 	^primFailCode := reasonCode
-]
-
-{ #category : #'primitive support' }
-InterpreterPrimitives >> primitiveFailForFFIException: exceptionCode at: pc [
-	<var: 'exceptionCode' type: #usqLong>
-	<var: 'pc' type: #usqInt>
-	"Set PrimErrFFIException primitive failure and associated exceptionCode (a.k.a. 
-	 osErrorCode) and exceptionPC. Under control of the ffiExceptionResponse flag,
-	 if in a primitive with an error code and the inFFIFlags indicate we're in an FFI call,
-	 then fail the primitive.
-	 ffiExceptionResponse < 0 never fail
-	 ffiExceptionResponse = 0 fail if method has a primitive error code (default)
-	 ffiExceptionResponse > 0 always fail"
-	<api>
-	((inFFIFlags noMask: DisownVMForFFICall)	"i.e. not in an FFI call"
-	 or: [ffiExceptionResponse < 0]) ifTrue:		"i.e. never fail"
-		[^self].
-	osErrorCode := self cCoerceSimple: exceptionCode to: #sqLong.
-	exceptionPC := pc.
-	primFailCode := PrimErrFFIException.
-	(ffiExceptionResponse > 0					"always fail..."
-	 or: [(objectMemory isOopCompiledMethod: newMethod)
-		 and: [self methodUsesPrimitiveErrorCode: newMethod]]) ifTrue:
-		[self ownVM: DisownVMForFFICall. "To take ownership but importantly to reset inFFIFlags"
-		 self activateFailingPrimitiveMethod]
 ]
 
 { #category : #'primitive support' }
@@ -3685,12 +3659,13 @@ InterpreterPrimitives >> primitiveSmallFloatDivide [
 	<var: #rcvr type: #double>
 	<var: #arg type: #double>
 
-	rcvr := objectMemory smallFloatValueOf: (self stackValue: 1).
+	rcvr := objectMemory loadFloatOrIntFrom: (self stackValue: 1).
 	arg := objectMemory loadFloatOrIntFrom: self stackTop.
 	arg = 0.0 ifTrue:
 		[self primitiveFail].
-	self successful ifTrue:
-		[self pop: 2 thenPushFloat: rcvr / arg]
+	self successful 
+		ifTrue: [self pop: 2 thenPushFloat: rcvr / arg]
+		ifFalse: [self primitiveFailFor: PrimErrBadArgument]
 ]
 
 { #category : #'arithmetic float primitives' }
@@ -3700,10 +3675,11 @@ InterpreterPrimitives >> primitiveSmallFloatEqual [
 	<var: #rcvr type: #double>
 	<var: #arg type: #double>
 
-	rcvr := objectMemory smallFloatValueOf: (self stackValue: 1).
+	rcvr := objectMemory loadFloatOrIntFrom: (self stackValue: 1).
 	arg := objectMemory loadFloatOrIntFrom: self stackTop.
-	self successful ifTrue:
-		[self pop: 2 thenPushBool: rcvr = arg]
+	self successful 
+		ifTrue: [self pop: 2 thenPushBool: (rcvr = arg)] 
+		ifFalse: [self primitiveFailFor: PrimErrBadArgument]
 ]
 
 { #category : #'arithmetic float primitives' }
@@ -3743,10 +3719,11 @@ InterpreterPrimitives >> primitiveSmallFloatGreaterOrEqual [
 	<var: #rcvr type: #double>
 	<var: #arg type: #double>
 
-	rcvr := objectMemory smallFloatValueOf: (self stackValue: 1).
+	rcvr := objectMemory loadFloatOrIntFrom: (self stackValue: 1).
 	arg := objectMemory loadFloatOrIntFrom: self stackTop.
-	self successful ifTrue:
-		[self pop: 2 thenPushBool: rcvr >= arg]
+	self successful 
+	ifTrue: [self pop: 2 thenPushBool: rcvr >= arg]
+	ifFalse: [self primitiveFailFor: PrimErrBadArgument]
 ]
 
 { #category : #'arithmetic float primitives' }
@@ -3778,10 +3755,11 @@ InterpreterPrimitives >> primitiveSmallFloatLessOrEqual [
 	<var: #rcvr type: #double>
 	<var: #arg type: #double>
 
-	rcvr := objectMemory smallFloatValueOf: (self stackValue: 1).
+	rcvr := objectMemory loadFloatOrIntFrom: (self stackValue: 1).
 	arg := objectMemory loadFloatOrIntFrom: self stackTop.
-	self successful ifTrue:
-		[self pop: 2 thenPushBool: rcvr <= arg]
+	self successful 
+		ifTrue: [self pop: 2 thenPushBool: rcvr <= arg]
+		ifFalse: [self primitiveFailFor: PrimErrBadArgument]
 ]
 
 { #category : #'arithmetic float primitives' }
@@ -3814,10 +3792,11 @@ InterpreterPrimitives >> primitiveSmallFloatMultiply [
 	<var: #rcvr type: #double>
 	<var: #arg type: #double>
 
-	rcvr := objectMemory smallFloatValueOf: (self stackValue: 1).
+	rcvr := objectMemory loadFloatOrIntFrom: (self stackValue: 1).
 	arg := objectMemory loadFloatOrIntFrom: self stackTop.
-	self successful ifTrue:
-		[self pop: 2 thenPushFloat: rcvr * arg]
+	self successful 
+		ifTrue: [self pop: 2 thenPushFloat: rcvr * arg]
+		ifFalse: [self primitiveFailFor: PrimErrBadArgument]
 ]
 
 { #category : #'arithmetic float primitives' }
@@ -3827,10 +3806,11 @@ InterpreterPrimitives >> primitiveSmallFloatNotEqual [
 	<var: #rcvr type: #double>
 	<var: #arg type: #double>
 
-	rcvr := objectMemory smallFloatValueOf: (self stackValue: 1).
+	rcvr := objectMemory loadFloatOrIntFrom: (self stackValue: 1).
 	arg := objectMemory loadFloatOrIntFrom: self stackTop.
-	self successful ifTrue:
-		[self pop: 2 thenPushBool: (rcvr = arg) not]
+	self successful 
+		ifTrue: [self pop: 2 thenPushBool: (rcvr = arg) not]
+		ifFalse: [self primitiveFailFor: PrimErrBadArgument]
 ]
 
 { #category : #'arithmetic float primitives' }
@@ -4930,37 +4910,10 @@ InterpreterPrimitives >> sizeFieldOfAlien: alienObj [
 	^objectMemory longAt: alienObj + objectMemory baseHeaderSize
 ]
 
-{ #category : #'primitive support' }
-InterpreterPrimitives >> sizeOfAlienData: oop [
-	"Answer the start of the Alien's data or fail if oop is not an Alien."
-	<api>
-	<returnTypeC: #usqInt>
-	| size |
-	(self is: oop KindOfClass: (objectMemory splObj: ClassAlien)) ifFalse:
-		[self primitiveFailFor: PrimErrBadArgument.
-		 ^0].
-	size := self sizeFieldOfAlien: oop.
-	^size abs
-]
-
 { #category : #'stack access' }
 InterpreterPrimitives >> stackIntegerValue: aValue [
 
 	self subclassResponsibility
-]
-
-{ #category : #'primitive support' }
-InterpreterPrimitives >> startOfAlienData: oop [
-	"Answer the start of the Alien's data or fail if oop is not an Alien."
-	<api>
-	<returnTypeC: #'void *'>
-	(self is: oop KindOfClass: (objectMemory splObj: ClassAlien)) ifFalse:
-		[self primitiveFailFor: PrimErrBadArgument.
-		 ^0].
-	^self cCoerceSimple: ((self isDirectAlien: oop)
-						 	ifTrue: [oop + objectMemory baseHeaderSize + objectMemory bytesPerOop]
-							ifFalse: [objectMemory longAt: oop + objectMemory baseHeaderSize + objectMemory bytesPerOop])
-			to: #'void *'
 ]
 
 { #category : #'primitive support' }

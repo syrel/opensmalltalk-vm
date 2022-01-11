@@ -117,7 +117,6 @@ Class {
 		'objectMemory',
 		'objectRepresentation',
 		'processor',
-		'threadManager',
 		'methodZone',
 		'methodZoneBase',
 		'codeBase',
@@ -184,7 +183,6 @@ Class {
 		'byte2',
 		'byte3',
 		'bytecodePC',
-		'bytecodeSetOffset',
 		'opcodeIndex',
 		'numAbstractOpcodes',
 		'labelCounter',
@@ -464,7 +462,7 @@ Cogit class >> cog: aCompiledMethod selector: aSelector [
 
 { #category : #'in-image compilation' }
 Cogit class >> cog: aCompiledMethod selectorOrNumCopied: selectorOrNumCopied options: optionsDictionaryOrArray [
-	"StackToRegisterMappingCogit cog: (Integer >> #benchFib) selector: #benchFib options: #(COGMTVM false)"
+	"StackToRegisterMappingCogit cog: (Integer >> #benchFib) selector: #benchFib options: #()"
 	| cogit coInterpreter |
 	cogit := self initializedInstanceForTests: optionsDictionaryOrArray.
 	coInterpreter := cogit coInterpreter.
@@ -507,19 +505,16 @@ Cogit class >> declareCVarsIn: aCCodeGenerator [
 			'ceEnclosingObjectTrampoline' 'numIRCs' 'indexOfIRC' 'theIRCs') do:
 				[:variableNotNeededInNormalVM|
 				aCCodeGenerator removeVariable: variableNotNeededInNormalVM].
-	aCCodeGenerator removeConstant: #COGMTVM. "this should be defined at compile time"
+
 	aCCodeGenerator
 		addHeaderFile:'<stddef.h>'; "for e.g. offsetof"
 		addHeaderFile:'"jit/jit.h"';
+		addHeaderFile:'"debug.h"';		
 		addHeaderFile:'"sqCogStackAlignment.h"';
 		addHeaderFile:'"dispdbg.h"'; "must precede cointerp.h & cogit.h otherwise NoDbgRegParms gets screwed up"
 		addHeaderFile:'"cogmethod.h"'.
 	aCCodeGenerator
-		addHeaderFile:'#if COGMTVM';
-		addHeaderFile:'"cointerpmt.h"';
-		addHeaderFile:'#else';
 		addHeaderFile:'"cointerp.h"';
-		addHeaderFile:'#endif';
 		addHeaderFile:'"cogit.h"';
 		addHeaderFile:'<stdint.h>'.
 		
@@ -635,7 +630,7 @@ Cogit class >> defineAtCompileTime: anObject [
 	 because the VM generated is specific to these varables."
 	anObject isSymbol ifFalse:
 		[^false].
-	(#(STACKVM COGVM COGMTVM SPURVM) includes: anObject) ifTrue:
+	(#(STACKVM COGVM SPURVM) includes: anObject) ifTrue:
 		[^false].
 	^VMBasicConstants namesDefinedAtCompileTime includes: anObject
 ]
@@ -849,6 +844,7 @@ Cogit class >> initializeAnnotationConstants [
 	IsSendCall := 7.
 	"These are formed by combining IsSendCall and IsAnnotationExtension annotations."
 	IsSuperSend := 8.
+
 	IsDirectedSuperSend := BytecodeSetHasDirectedSuperSend ifTrue: [9].
 	IsDirectedSuperBindingSend := BytecodeSetHasDirectedSuperSend ifTrue: [10].
 
@@ -1270,8 +1266,8 @@ Cogit class >> initializeWithOptions: optionsDictionary [
 	self initializeMiscConstants. "must precede other initialization."
 	self initializeErrorCodes.
 	self initializeCogMethodConstants.
-	self initializeAnnotationConstants.
 	self initializeBytecodeTable.
+	self initializeAnnotationConstants.
 	self initializeNumTrampolines.
 	self initializePrimitiveTable
 ]
@@ -1386,7 +1382,6 @@ Cogit class >> notesAndQueries [
 { #category : #accessing }
 Cogit class >> numTrampolines [
 	^39 "31 + 4 each for self and super sends"
-		+ (COGMTVM ifTrue: [ 2 ] ifFalse: [ 0 ])
 
 	"self withAllSubclasses collect: [:c| {c. (c instVarNames select: [:ea| ea beginsWith: 'ce']) size}]"
 ]
@@ -4739,14 +4734,6 @@ Cogit >> cog: aMethodObj selector: aSelectorOop [
 			isMNUCase: false].
 	aMethodObj = breakMethod ifTrue: [self halt: 'Compilation of breakMethod'].
 
-	"If the generators for the alternate bytecode set are missing then interpret."
-	(coInterpreter methodUsesAlternateBytecodeSet: aMethodObj)
-		ifTrue:
-			[(self numElementsIn: generatorTable) <= 256 ifTrue:
-				[^nil].
-			 bytecodeSetOffset := 256]
-		ifFalse:
-			[bytecodeSetOffset := 0].
 	objectRepresentation ensureNoForwardedLiteralsIn: aMethodObj.
 	methodObj := aMethodObj.
 	methodHeader := objectMemory methodHeaderOf: aMethodObj.
@@ -4951,14 +4938,7 @@ Cogit >> cogFullBlockMethod: aMethodObj numCopied: numCopied [
 	self deny: (coInterpreter methodHasCogMethod: aMethodObj).
 	self assert: (objectMemory isOopCompiledMethod: (coInterpreter ultimateLiteralOf: aMethodObj)).
 	aMethodObj = breakMethod ifTrue: [self halt: 'Compilation of breakMethod'].
-	"If the generators for the alternate bytecode set are missing then interpret."
-	(coInterpreter methodUsesAlternateBytecodeSet: aMethodObj)
-		ifTrue:
-			[(self numElementsIn: generatorTable) <= 256 ifTrue:
-				[^nil].
-			 bytecodeSetOffset := 256]
-		ifFalse:
-			[bytecodeSetOffset := 0].
+
 	objectRepresentation ensureNoForwardedLiteralsIn: aMethodObj.
 	methodObj := aMethodObj.
 	methodHeader := objectMemory methodHeaderOf: aMethodObj.
@@ -8351,27 +8331,6 @@ Cogit >> generateTrampolines [
 
 ]
 
-{ #category : #initialization }
-Cogit >> generateVMOwnerLockFunctions [
-	| startAddress |
-	self cppIf: COGMTVM
-		ifTrue:
-			[self allocateOpcodes: 30 bytecodes: 0.
-			startAddress := methodZoneBase.
-			self zeroOpcodeIndex.
-			backEnd generateLowLevelTryLock: coInterpreter vmOwnerLockAddress.
-			self outputInstructionsForGeneratedRuntimeAt: startAddress.
-			self recordGeneratedRunTime: 'ceTryLockVMOwner' address: startAddress.
-			ceTryLockVMOwner := self cCoerceSimple: startAddress to: #'usqIntptr_t (*)(void)'.
-
-			startAddress := methodZoneBase.
-			self zeroOpcodeIndex.
-			backEnd generateLowLevelUnlock: coInterpreter vmOwnerLockAddress.
-			self outputInstructionsForGeneratedRuntimeAt: startAddress.
-			self recordGeneratedRunTime: 'ceUnlockVMOwner' address: startAddress.
-			ceUnlockVMOwner := self cCoerceSimple: startAddress to: #'void (*)(void)' ]
-]
-
 { #category : #'compile abstract instructions' }
 Cogit >> generatorAt: index [
 	<cmacro: '(index) (&generatorTable[index])'>
@@ -8383,7 +8342,7 @@ Cogit >> generatorAt: index [
 Cogit >> generatorForPC: pc [
 	<returnTypeC: #'BytecodeDescriptor *'>
 	<inline: true>
-	^self generatorAt: bytecodeSetOffset + (objectMemory fetchByte: pc ofObject: methodObj)
+	^self generatorAt: (objectMemory fetchByte: pc ofObject: methodObj)
 ]
 
 { #category : #accessing }
@@ -8764,7 +8723,6 @@ Cogit >> initializeCodeZoneFrom: startAddress upTo: endAddress [
 	self enableCodeZoneWriteDuring: [
 		self maybeGenerateCheckFeatures.
 		self maybeGenerateICacheFlush.
-		self generateVMOwnerLockFunctions.
 		self genGetLeafCallStackPointer ].
 
 	self generateStackPointerCapture.
@@ -8797,8 +8755,7 @@ Cogit >> initializeProcessor [
 	self initializeProcessorStack: coInterpreter rumpCStackAddress.
 	self setCFramePointer: processor fp.
 	self setCStackPointer: processor sp.
-	threadManager ifNotNil:
-		[processor := MultiProcessor for: processor coInterpreter: coInterpreter]
+
 ]
 
 { #category : #initialization }
@@ -9082,7 +9039,7 @@ Cogit >> linkedSuperSendCacheTags [
 Cogit >> loadBytesAndGetDescriptor [
 	<var: #descriptor type: #'BytecodeDescriptor *'>
 	| descriptor |
-	byte0 := (objectMemory fetchByte: bytecodePC ofObject: methodObj)  + bytecodeSetOffset.
+	byte0 := objectMemory fetchByte: bytecodePC ofObject: methodObj.
 	descriptor := self generatorAt: byte0.
 	self loadSubsequentBytesForDescriptor: descriptor at: bytecodePC.
 	^ descriptor
@@ -10338,7 +10295,7 @@ Cogit >> nextDescriptorExtensionsAndNextPCInto: aQuaternaryBlock [
 	bcpc := bytecodePC + descriptor numBytes.
 	[bcpc > endPC ifTrue:
 		[^aQuaternaryBlock value: nil value: 0 value: 0 value: 0].
-	 byte0 := (objectMemory fetchByte: bcpc ofObject: methodObj)  + bytecodeSetOffset.
+	 byte0 := objectMemory fetchByte: bcpc ofObject: methodObj.
 	 descriptor := self generatorAt: byte0.
 	 self loadSubsequentBytesForDescriptor: descriptor at: bcpc.
 	 descriptor isExtension ifFalse:
@@ -11473,7 +11430,7 @@ Cogit >> scanMethod [
 	pc := latestContinuation := initialPC.
 	framelessStackDelta := nExts := extA := numExtB := extB := 0.
 	[pc <= endPC] whileTrue:
-		[byte0 := (objectMemory fetchByte: pc ofObject: methodObj) + bytecodeSetOffset.
+		[byte0 := objectMemory fetchByte: pc ofObject: methodObj.
 		 descriptor := self generatorAt: byte0.
 		 descriptor isExtension ifTrue:
 			[descriptor opcode = Nop ifTrue: "unknown bytecode tag; see Cogit class>>#generatorTableFrom:"
@@ -11665,7 +11622,6 @@ Cogit >> setInterpreter: aCoInterpreter [
 	<doNotGenerate>
 	coInterpreter := aCoInterpreter.
 	objectMemory := aCoInterpreter objectMemory.
-	threadManager := aCoInterpreter threadManager. "N.B. may be nil"
 	methodZone := self class methodZoneClass new.
 	objectRepresentation := objectMemory objectRepresentationClass
 								forCogit: self methodZone: methodZone.
@@ -11745,15 +11701,6 @@ Cogit >> setStackAlignment: stackAlignment expectedSPOffset: spOffset expectedFP
 	expectedFPAlignment := fpOffset \\ stackAlignment.
 	cStackAlignment := stackAlignment
 
-]
-
-{ #category : #initialization }
-Cogit >> setThreadManager: aCogThreadManager [
-	"Initialization of the code generator in the simulator.
-	 Used in the separate VM since this VM does not do a second initialization of the interpreter,
-	 only a second initialization of the objectMemory."
-	<doNotGenerate>
-	threadManager := aCogThreadManager "N.B. may be nil"
 ]
 
 { #category : #'simulation only' }

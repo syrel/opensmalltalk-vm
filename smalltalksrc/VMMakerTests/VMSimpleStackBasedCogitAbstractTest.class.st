@@ -418,6 +418,12 @@ VMSimpleStackBasedCogitAbstractTest >> instructionPointer [
 	^ self readRegister: machineSimulator instructionPointerRegister
 ]
 
+{ #category : #helpers }
+VMSimpleStackBasedCogitAbstractTest >> interpreterClass [
+
+	^ CogVMSimulatorLSB
+]
+
 { #category : #running }
 VMSimpleStackBasedCogitAbstractTest >> jitCompilerClass [
 
@@ -428,7 +434,9 @@ VMSimpleStackBasedCogitAbstractTest >> jitCompilerClass [
 VMSimpleStackBasedCogitAbstractTest >> jitMethod: aPharoCompiledMethod selector: aSelectorOop [
 
 	| methodOop |
-	methodOop := self createMethodOopFromPharoMethod: aPharoCompiledMethod.
+
+	methodOop := self createMethodOopFromPharoMethod:aPharoCompiledMethod.
+
 	^ cogit cog: methodOop selector: aSelectorOop
 ]
 
@@ -438,6 +446,7 @@ VMSimpleStackBasedCogitAbstractTest >> jitOptions [
 	^ Dictionary newFromPairs: { 
 		#ISA. isa.
 		#IMMUTABILITY. false.
+		#bytecodeTableInitializer. #initializeBytecodeTableForSistaV1.	
 		#ObjectMemory. self memoryClass name }
 ]
 
@@ -461,25 +470,6 @@ VMSimpleStackBasedCogitAbstractTest >> memoryClass [
 	^ self wordSize = 4
 		ifTrue: [ Spur32BitCoMemoryManager ]
 		ifFalse: [ Spur64BitCoMemoryManager ]
-]
-
-{ #category : #helpers }
-VMSimpleStackBasedCogitAbstractTest >> newInterpreter [
-
-	| theMemory |
-	theMemory := self newMemory.
-
-	CogVMSimulatorLSB
-		initializeWithOptions: {
-			#BytesPerWord. 8.
-			#ObjectMemory. theMemory class name.
-			#bytecodeTableInitializer. #initializeBytecodeTableForSistaV1}
-		objectMemoryClass: theMemory class.
-		
-		
-	^ CogVMSimulatorLSB basicNew
-		objectMemory: theMemory;
-		basicInitialize
 ]
 
 { #category : #running }

@@ -620,8 +620,7 @@ Class {
 		'statShrinkMemory',
 		'statAllocatedBytes',
 		'statMaxAllocSegmentTime',
-		'unscannedEphemeronsQueueInitialSize',
-		'largeOpaqueMemoryManager'
+		'unscannedEphemeronsQueueInitialSize'
 	],
 	#classVars : [
 		'BitsPerByte',
@@ -970,19 +969,12 @@ SpurMemoryManager class >> initializeSpecialObjectIndices [
 	ClassLargeNegativeInteger := 42.
 
 	ClassExternalAddress := 43.
-	ClassExternalStructure := 44.
-	ClassExternalData := 45.
-	ClassExternalFunction := 46.
-	ClassExternalLibrary := 47.
 
 	SelectorAboutToReturn := 48.
 	SelectorRunWithIn := 49.
 
 	SelectorAttemptToAssign := 50.
 	"PrimErrTableIndex := 51. in VMClass class>>initializePrimitiveErrorCodes"
-	ClassAlien := 52.
-	SelectorInvokeCallback := 53.
-	ClassUnsafeAlien := 54.
 
 	ClassWeakFinalizer := 55.
 
@@ -3533,11 +3525,6 @@ SpurMemoryManager >> checkedLongAt: byteAddress [
 	^self longAt: byteAddress
 ]
 
-{ #category : #accessing }
-SpurMemoryManager >> classAlien [
-	^self splObj: ClassAlien
-]
-
 { #category : #'plugin support' }
 SpurMemoryManager >> classArray [
 	<api>
@@ -3623,26 +3610,6 @@ SpurMemoryManager >> classExternalAddress: aClass [
 SpurMemoryManager >> classExternalAddressIndex [
 	<api>
 	^ self ensureBehaviorHash: self classExternalAddress
-]
-
-{ #category : #accessing }
-SpurMemoryManager >> classExternalData [
-	^self splObj: ClassExternalData
-]
-
-{ #category : #accessing }
-SpurMemoryManager >> classExternalFunction [
-	^self splObj: ClassExternalFunction
-]
-
-{ #category : #accessing }
-SpurMemoryManager >> classExternalLibrary [
-	^self splObj: ClassExternalLibrary
-]
-
-{ #category : #accessing }
-SpurMemoryManager >> classExternalStructure [
-	^self splObj: ClassExternalStructure
 ]
 
 { #category : #'plugin support' }
@@ -3893,11 +3860,6 @@ SpurMemoryManager >> classTagForClass: classObj [
 SpurMemoryManager >> classTagForSpecialObjectsIndex: splObjIndex compactClassIndex: compactClassIndex [
 	"Answer the compactClassIndex to use as a tag in the first-level method lookup cache."
 	^compactClassIndex
-]
-
-{ #category : #accessing }
-SpurMemoryManager >> classUnsafeAlien [
-	^self splObj: ClassUnsafeAlien
 ]
 
 { #category : #'debug support' }
@@ -4327,13 +4289,6 @@ SpurMemoryManager >> detachFreeObject: freeChunk [
 	chunkBytes := self bytesInObject: freeChunk.
 	totalFreeOldSpace := totalFreeOldSpace - chunkBytes.
 	self unlinkFreeChunk: freeChunk chunkBytes: chunkBytes
-]
-
-{ #category : #'simulation only' }
-SpurMemoryManager >> disownVM: flags [
-	"hack around the CoInterpreter/ObjectMemory split refactoring"
-	<doNotGenerate>
-	^coInterpreter disownVM: flags
 ]
 
 { #category : #'allocation accounting' }
@@ -9583,13 +9538,6 @@ SpurMemoryManager >> outerContextOf: aBlockClosureOop [
 	^ self fetchPointer: FullClosureOuterContextIndex ofObject: aBlockClosureOop
 ]
 
-{ #category : #'simulation only' }
-SpurMemoryManager >> ownVM: flags [
-	"hack around the CoInterpreter/ObjectMemory split refactoring"
-	<doNotGenerate>
-	^coInterpreter ownVM: flags
-]
-
 { #category : #accessing }
 SpurMemoryManager >> pastSpaceStart [
 	<cmacro: '() GIV(pastSpaceStart)'>
@@ -9841,13 +9789,6 @@ SpurMemoryManager >> primitiveFailFor: reasonCode [
 	"hack around the CoInterpreter/ObjectMemory split refactoring"
 	<doNotGenerate>
 	^coInterpreter primitiveFailFor: reasonCode
-]
-
-{ #category : #'simulation only' }
-SpurMemoryManager >> primitiveFailForFFIException: errorCode at: pc [
-	"hack around the CoInterpreter/ObjectMemory split refactoring"
-	<doNotGenerate>
-	^coInterpreter primitiveFailForFFIException: errorCode at: pc
 ]
 
 { #category : #'simulation only' }

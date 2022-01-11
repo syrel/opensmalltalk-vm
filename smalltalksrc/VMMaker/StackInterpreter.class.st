@@ -412,7 +412,8 @@ Class {
 		'maxStackMessagePrinted',
 		'libFFI',
 		'codeGeneratorToComputeAccessorDepth',
-		'showSurfaceFn'
+		'showSurfaceFn',
+		'messageCount'
 	],
 	#classVars : [
 		'AccessModifierPrivate',
@@ -493,7 +494,8 @@ StackInterpreter class >> ancilliaryClasses [
 		CogStackPages.
 		InterpreterStackPages.
 		LibFFI.
-		CogStackPage }
+		CogStackPage.
+		SpurImageHeaderStruct}
 ]
 
 { #category : #constants }
@@ -615,7 +617,11 @@ If ffi is put as a separate header, slang will sort the header and put it outsid
 	aCCodeGenerator
 		var: #reenterInterpreter
 		declareC: 'jmp_buf reenterInterpreter; /* private export */'.
-		
+	
+	aCCodeGenerator
+			var: #messageCount
+			type: #'usqInt'.
+	
 	aCCodeGenerator removeVariable: #'libFFI'.
 	LibFFIConstants classVariables do: [ :e | aCCodeGenerator removeConstant: e name ].
 ]
@@ -986,13 +992,6 @@ StackInterpreter class >> initializeMiscConstants [
 
 	ReturnToInterpreter := 1. "setjmp/longjmp code."
 
-	"N.B. some of these DisownFlags are replicated in platforms/Cross/vm/sqVirtualMachine.h.
-	 Hence they should always be initialized.  Because of a hack with callbacks in the non-threaded
-	 VM they must not conflct with the VM's tag bits."
-	DisownVMLockOutFullGC := 8.
-	DisownVMForFFICall := 16.
-	DisownVMForThreading := 32
-
 ]
 
 { #category : #initialization }
@@ -1088,10 +1087,10 @@ StackInterpreter class >> initializePrimitiveTable [
 		(62 primitiveSize)
 		(63 primitiveStringAt)
 		(64 primitiveStringAtPut)
-		
-		(65 primitiveFail)
-		(66 primitiveFail)
-		(67 primitiveFail)
+		"The stream primitives no longer pay their way; normal Smalltalk code is faster."
+		(65 primitiveStartProfiling)"was primitiveNext"
+		(66 primitiveStopProfiling) "was primitiveNextPut"
+		(67 0 "a.k.a. primitiveFail but faster because primitiveFail won't even be called") "was primitiveAtEnd"
 
 		"StorageManagement Primitives (68-79)"
 		(68 primitiveObjectAt)
@@ -1694,7 +1693,7 @@ StackInterpreter class >> requiredMethodNames: options [
 		primitiveFail primitiveFailFor: primitiveFlushExternalPrimitives printAllStacks printCallStack printContext:
 			printExternalHeadFrame printFramesInPage: printFrame: printHeadFrame printMemory printOop:
 				printStackPages printStackPageList printStackPagesInUse printStackPageListInUse
-		readableFormat: readImageFromFile:HeapSize:StartingAt:
+		readableFormat: readImageFromFile:StartingAt:
 		setFullScreenFlag: setInterruptKeycode: setInterruptPending: setInterruptCheckChain:
 			setSavedWindowSize: success:
 		validInstructionPointer:inMethod:framePointer:) asSet.
@@ -1804,10 +1803,6 @@ StackInterpreter class >> writeVMHeaderTo: aStream bytesPerWord: bytesPerWord ge
 	(InitializationOptions at: #SpurObjectMemory ifAbsent: false) ifTrue:
 		[aCCodeGenerator putDefineOf: #SPURVM as: 1 on: aStream].
 
-	aCCodeGenerator
-		putDefineOf: #DisownVMLockOutFullGC as: DisownVMLockOutFullGC on: aStream;
-		putDefineOf: #DisownVMForFFICall as: DisownVMForFFICall on: aStream;
-		putDefineOf: #DisownVMForThreading as: DisownVMForThreading on: aStream
 ]
 
 { #category : #simulation }
@@ -2039,12 +2034,58 @@ StackInterpreter >> allOnesAsCharStar [
 ]
 
 { #category : #'image save/restore' }
+StackInterpreter >> allocateHeapMemoryForImage: f withHeader: header desiredStartingAddress: desiredPositionOfHeap [ 
+
+	<var: #f type: #sqImageFile>
+	<var: #header type: #'SpurImageHeaderStruct'>
+
+	| allocationReserve headroom heapSize minimumMemory |
+	
+	allocationReserve := self interpreterAllocationReserveBytes.
+
+	headroom := objectMemory
+		            initialHeadroom: extraVMMemory
+		            givenFreeOldSpaceInImage: header freeOldSpaceInImage.
+	heapSize := objectMemory roundUpHeapSize:
+		            header dataSize + headroom + objectMemory newSpaceBytes
+		            + (headroom > allocationReserve
+				             ifTrue: [ 0 ]
+				             ifFalse: [ allocationReserve ]).
+
+	minimumMemory := header dataSize + objectMemory newSpaceBytes
+	                 + allocationReserve.
+
+	"allocate a contiguous block of memory for the heap"
+	objectMemory memory: (self
+			 allocateMemory: heapSize
+			 minimum: minimumMemory
+			 imageFile: f
+			 headerSize: header headerSize
+			 desiredPosition: desiredPositionOfHeap) asUnsignedInteger.
+			
+	objectMemory memory ifNil: [ self insufficientMemoryAvailableError ].
+
+	^ objectMemory
+		setHeapBase: objectMemory memory
+		memoryLimit: objectMemory memory + heapSize
+		endOfMemory: objectMemory memory + header dataSize.
+
+]
+
+{ #category : #'image save/restore' }
 StackInterpreter >> allocateJITMemory: desiredSize desiredPosition: desiredPosition [
 	
 	<inline: true>
 	<returnTypeC: #'char *'>
 	
 	^self pointerForOop: (self allocateJITMemory: desiredSize _: desiredPosition)
+]
+
+{ #category : #allocating }
+StackInterpreter >> allocateMemory: desiredSize Minimum: minimumSize ImageFile: imageFile HeaderSize: headerSize BaseAddress: baseAddress [ 
+	
+	<doNotGenerate>
+	^ memoryManager allocate: desiredSize desiredPosition: baseAddress
 ]
 
 { #category : #'image save/restore' }
@@ -2084,6 +2125,17 @@ StackInterpreter >> allocateMemory: heapSize minimum: minimumMemory imageFile: f
 							ImageFile: fileStream
 							HeaderSize: headerSize
 							BaseAddress: desiredBaseAddress)
+]
+
+{ #category : #'image save/restore' }
+StackInterpreter >> allocateMemoryForImage: f withHeader: header [
+
+	<var: #f type: #sqImageFile>
+	<var: #header type: #'SpurImageHeaderStruct'>
+
+	self allocateHeapMemoryForImage: f withHeader: header desiredStartingAddress: header oldBaseAddr.
+	
+	self loadImageFromFile: f withHeader: header 
 ]
 
 { #category : #'compiled methods' }
@@ -3562,7 +3614,7 @@ StackInterpreter >> bytecodePrimValueWithArg [
 	isBlock ifTrue:
 		[self externalizeIPandSP.
 		self initPrimCall.
-		self primitiveFullClosureValueWithArgs.
+		self primitiveFullClosureValue.
 		self internalizeIPandSP.
 		self successful ifTrue:
 			[^self fetchNextBytecode].
@@ -4035,7 +4087,7 @@ StackInterpreter >> checkForStackOverflow [
 ]
 
 { #category : #'image save/restore' }
-StackInterpreter >> checkImageVersionFrom: f startingAt: imageOffset [
+StackInterpreter >> checkImageVersionFrom: f [
 	"Read and verify the image file version number and return true if the the given image file needs to be byte-swapped. As a side effect, position the file stream just after the version number of the image header. This code prints a warning and does a hard-exit if it cannot find a valid version number."
 	"This code is based on C code by Ian Piumarta."
 
@@ -4045,38 +4097,21 @@ StackInterpreter >> checkImageVersionFrom: f startingAt: imageOffset [
 	<var: #imageOffset type: #squeakFileOffsetType>
 
 	"check the version number"
-	self sqImageFile: f Seek: imageOffset.
 	version := firstVersion := self getWord32FromFile: f swap: false.
 	(self readableFormat: version) ifTrue: [^ false].
 
 	"try with bytes reversed"
-	self sqImageFile: f Seek: imageOffset.
-	version := self getWord32FromFile: f swap: true.
-	(self readableFormat: version) ifTrue: [^ true].
-
-	"Note: The following is only meaningful if not reading an embedded image"
-	imageOffset = 0 ifTrue:[
-		"try skipping the first 512 bytes (prepended by certain Mac file transfer utilities)"
-		self sqImageFile: f Seek: 512.
-		version := self getWord32FromFile: f swap: false.
-		(self readableFormat: version) ifTrue: [^ false].
-
-		"try skipping the first 512 bytes with bytes reversed"
-		self sqImageFile: f Seek: 512.
-		version := self getWord32FromFile: f swap: true.
-		(self readableFormat: version) ifTrue: [^ true]].
+	(self readableFormat: version byteSwap32) ifTrue: [^ true].
 
 	"hard failure; abort"
-	self print: 'This interpreter (vers. '.
-	self printNum: self imageFormatVersion.
-	self print: ') cannot read image file (vers. '.
-	self printNum: firstVersion.
-	self print: ').'.
-	self cr.
-	self print: 'Press CR to quit...'.
-	self getchar.
+	self logError: 'Invalid image format: detected version %d, expected version %d' 
+		_: firstVersion 
+		_: self imageFormatVersion.
+	
 	self ioExitWithErrorCode: 1.
-	^false
+	
+	"This is needed by Slang"
+	^false	
 ]
 
 { #category : #'object memory support' }
@@ -4701,6 +4736,7 @@ StackInterpreter >> commonSendOrdinary [
 	self sendBreakpoint: messageSelector receiver: (self internalStackValue: argumentCount).
 	self printSends ifTrue:
 		[self printActivationNameForSelector: messageSelector startClass: (objectMemory classForClassTag: lkupClassTag); cr].
+	messageCount := messageCount + 1.
 	self internalFindNewMethodOrdinary.
 	self internalExecuteNewMethod.
 	self fetchNextBytecode
@@ -4983,6 +5019,13 @@ StackInterpreter >> createActualMessageTo: lookupClass [
 	argumentCount := 1
 ]
 
+{ #category : #accessing }
+StackInterpreter >> currentBytecode [
+
+	<doNotGenerate>
+	^ currentBytecode
+]
+
 { #category : #'stack pages' }
 StackInterpreter >> defaultNativeStackFrameSize [
 	"default native stack frame size"
@@ -5049,57 +5092,6 @@ StackInterpreter >> directedSuperclassSend [
 	self ensureReceiverUnforwarded.
 	self assert: lkupClassTag ~= objectMemory nilObject.
 	self commonSendOrdinary
-]
-
-{ #category : #'vm scheduling' }
-StackInterpreter >> disownVM: flags [
-	<api>
-	<inline: false>
-	"Release the VM to other threads and answer the current thread's index.
-	 Currently valid flags for the non-threaded VM are:
-		DisownVMLockOutFullGC	- prevent fullGCs while this thread disowns the VM
-		DisownVMForFFICall			- informs the VM that it is entering an FFI call
-
-	 This is the entry-point for plugins and primitives that wish to release the VM while
-	 performing some operation that may potentially block, and for callbacks returning
-	 back to some blocking operation.  While this exists for the threaded FFI VM we use
-	 it to reset newMethod and the argumentCount after a callback."
-	self assert: primFailCode = 0.
-
-	"Hack encodings of client state.  We use non-immediates (bottom three bits clear)
-	 for FFI/Plugin doing
-		save := self disownVM: FLAGS. ... callout ... self ownVM: save.
-	 We use immediate integer (bottom bit 1) for callbacks doing
-		save := self ownVM: 0. ... callback ... self disownVM: save. return to C"
-	self assert: ((objectMemory isImmediate: flags)
-				ifFalse:
-					[flags = (flags bitAnd: DisownVMLockOutFullGC+DisownVMForFFICall+DisownVMForThreading)
-					 and: [flags anyMask: DisownVMForFFICall]]
-				ifTrue:
-					[(objectMemory isIntegerObject: flags)
-					 and: [(objectMemory integerValueOf: flags)
-							between: 0
-							and: (self argumentCountOfMethodHeader: -1)]]).
-
-	"If DisownVMForFFICall this is from the FFI plugin and we're making a callout; remember the fact."
-	(((objectMemory isImmediate: flags)) not
-	 and: [flags anyMask: DisownVMForFFICall]) ifTrue:
-		[self assert: ((objectMemory isOopCompiledMethod: newMethod)
-				and: [(self argumentCountOf: newMethod) = argumentCount]).
-		 inFFIFlags := DisownVMForFFICall.
-		 ^flags].
-
-	self assert: ((objectMemory isIntegerObject: flags)
-				and: [(objectMemory integerValueOf: flags)
-						between: 0
-						and: (self argumentCountOfMethodHeader: -1)]).
-
-	"Otherwise this is a callback return; restore argumentCount and newMethod as per the ownVM: on callback."
-	argumentCount := objectMemory integerValueOf: flags.
-	newMethod := self popStack.
-	self assert: ((objectMemory isOopCompiledMethod: newMethod)
-				and: [(self argumentCountOf: newMethod) = argumentCount]).
-	^0
 ]
 
 { #category : #'message sending' }
@@ -7227,6 +7219,7 @@ StackInterpreter >> getInterruptPending [
 StackInterpreter >> getLongFromFile: aFile swap: swapFlag [
 	"Answer the next 32 or 64 bit word read from aFile, byte-swapped according to the swapFlag."
 	<var: #aFile type: #sqImageFile>
+	<var: #w type: #usqInt>
 	| w |
 	w := 0.
 	self cCode: [self
@@ -7791,7 +7784,8 @@ StackInterpreter >> initialize [
 	debugCallbackInvokes := debugCallbackPath := debugCallbackReturns := 0.
 	statForceInterruptCheck := statStackOverflow := statCheckForEvents :=
 	statProcessSwitch := statIOProcessEvents := statStackPageDivorce :=
-	statIdleUsecs := 0
+	statIdleUsecs := 0.
+	messageCount := 0.
 ]
 
 { #category : #initialization }
@@ -7819,6 +7813,18 @@ StackInterpreter >> initializeExtraClassInstVarIndices [
 ]
 
 { #category : #initialization }
+StackInterpreter >> initializeGlobalSessionID [
+	"Initialize the globalSessionID.
+	To ensure compatibility with old plugins, keep the value to a postive signed 32 bit integer"
+
+	[globalSessionID = 0] whileTrue:
+		[globalSessionID := self
+			cCode: [((self time: #NULL) + self ioMSecs) bitAnd: 16r7FFFFFFF]
+			inSmalltalk: [((self time: #NULL) + self ioMSecs) bitAnd: 16r7FFFFFFF]].
+
+]
+
+{ #category : #initialization }
 StackInterpreter >> initializeInterpreter: bytesToShift [
 	"Initialize Interpreter state before starting execution of a new image."
 	interpreterProxy := self sqGetInterpreterProxy.
@@ -7833,10 +7839,7 @@ StackInterpreter >> initializeInterpreter: bytesToShift [
 	methodDictLinearSearchLimit := 8.
 	self initialCleanup.
 	profileSemaphore := profileProcess := profileMethod := objectMemory nilObject.
-	[globalSessionID = 0] whileTrue:
-		[globalSessionID := self
-								cCode: [(self time: #NULL) + self ioMSecs]
-								inSmalltalk: [(Random new next * (SmallInteger maxVal min: 16rFFFFFFFF)) asInteger]].
+	self initializeGlobalSessionID.
 	metaAccessorDepth := -2.
 	super initializeInterpreter: bytesToShift
 ]
@@ -8260,8 +8263,7 @@ StackInterpreter >> interpret [
 	"If stacklimit is zero then the stack pages have not been initialized."
 	stackLimit = 0 ifTrue:
 		[^self initStackPagesAndInterpret].
-	"record entry time when running as a browser plug-in"
-	self browserPluginInitialiseIfNeeded.
+
 	self internalizeIPandSP.
 	self initExtensions.
 	self fetchNextBytecode.
@@ -8992,6 +8994,27 @@ StackInterpreter >> loadBitBltFrom: bb [
 	fn := self ioLoadFunction: 'loadBitBltFrom' From: 'BitBltPlugin'.
 	fn = 0 ifTrue: [^self primitiveFail].
 	^self cCode: '((sqInt (*)(sqInt))fn)(bb)'
+]
+
+{ #category : #'image save/restore' }
+StackInterpreter >> loadImageFromFile: f withHeader: header [ 
+
+	<var: #f type: #sqImageFile>
+	<var: #header type: #'SpurImageHeaderStruct'>	
+	
+	"read in the image in bulk, then swap the bytes if necessary"
+	| bytesRead bytesToShift |
+	bytesRead := objectMemory
+		             readHeapFromImageFile: f
+		             dataBytes: header dataSize.
+	bytesRead ~= header dataSize ifTrue: [ self unableToReadImageError ].
+
+	self ensureImageFormatIsUpToDate: header swapBytes.
+
+	"compute difference between old and new memory base addresses"
+	bytesToShift := objectMemory memoryBaseForImageRead - header oldBaseAddr.
+	self initializeInterpreter: bytesToShift. "adjusts all oops to new location"
+
 ]
 
 { #category : #initialization }
@@ -10833,43 +10856,6 @@ StackInterpreter >> openOn: fileName [
 	self openOn: fileName extraMemory: 2500000
 ]
 
-{ #category : #'vm scheduling' }
-StackInterpreter >> ownVM: threadIndexAndFlags [
-	<api>
-	<inline: false>
-	"This is the entry-point for plugins and primitives that wish to reacquire the VM after having
-	 released it via disownVM or callbacks that want to acquire it without knowing their ownership
-	 status.  While this exists for the threaded FFI VM we use it to reset newMethod and the
-	 argumentCount after a callback.
-
-	 Answer -1 if the current thread is unknown to the VM and fails to take ownership."
-	<var: 'amInVMThread' declareC: 'extern sqInt amInVMThread(void)'>
-	self cppIf: COGMTVM
-		ifTrue:
-			[self amInVMThread ifFalse:
-				[^-1]].
-
-	self assert: ((objectMemory isOopCompiledMethod: newMethod)
-				and: [(self argumentCountOf: newMethod) = argumentCount]).
-
-	"Hack encodings of client state.  We use non-immediates (bottom three bits clear)
-	 for FFI/Plugin doing
-		save := self disownVM: FLAGS. ... callout ... self ownVM: save.
-	 We use immediate integer (bottom bit 1) for callbacks doing
-		save := self ownVM: 0. ... callback ... self disownVM: save. return to C"
-
-	"If DisownVMForFFICall this is from the FFI plugin and we're returning from a callout."
-	(threadIndexAndFlags anyMask: DisownVMForFFICall) ifTrue:
-		[inFFIFlags := 0.
-		 ^threadIndexAndFlags].
-
-	"Otherwise this is a callback; stash newMethod on the stack and encode
-	 argumentCount in the flags retrieved when the calback calls disownVM:."
-	self assert: primFailCode = 0.
-	self push: newMethod.
-	^objectMemory integerObjectOf: argumentCount
-]
-
 { #category : #'as yet unclassified' }
 StackInterpreter >> page: aCogStackPage [ 
 	self shouldBeImplemented.
@@ -11353,6 +11339,24 @@ StackInterpreter >> primitiveObject: actualReceiver perform: selector withArgume
 	self executeNewMethod.
 	self initPrimCall.  "Recursive xeq affects primErrorCode"
 	^nil
+]
+
+{ #category : #'primitives message counting' }
+StackInterpreter >> primitiveStartProfiling [
+
+	self cppIf: FEATURE_MESSAGE_COUNT 
+		ifTrue: [ messageCount := 0 ] 
+		ifFalse: [ self primitiveFailFor: PrimErrUnsupported ]
+
+]
+
+{ #category : #'primitives message counting' }
+StackInterpreter >> primitiveStopProfiling [
+
+	self cppIf: FEATURE_MESSAGE_COUNT 
+		ifTrue: [ self pop: 1 thenPushInteger: messageCount ] 
+		ifFalse: [ self primitiveFailFor: PrimErrUnsupported ]
+	
 ]
 
 { #category : #'as yet unclassified' }
@@ -12126,17 +12130,7 @@ StackInterpreter >> printOop: oop [
 		[self print: ' nbytes '; printNum: (objectMemory numBytesOf: oop)].
 	self cr.
 	(fmt between: objectMemory firstLongFormat and: objectMemory firstCompiledMethodFormat - 1) ifTrue:
-		["This will answer false if splObj: ClassAlien is nilObject"
-		 (self is: oop KindOfClass: (objectMemory splObj: ClassAlien)) ifTrue:
-			[self print: ' datasize '; printNum: (self sizeOfAlienData: oop).
-			self print: ((self isIndirectAlien: oop)
-							ifTrue: [' indirect @ ']
-							ifFalse:
-								[(self isPointerAlien: oop)
-									ifTrue: [' pointer @ ']
-									ifFalse: [' direct @ ']]).
-			 ^self printHex: (self startOfAlienData: oop) asUnsignedInteger; cr].
-		 (objectMemory isWordsNonImm: oop) ifTrue:
+		[(objectMemory isWordsNonImm: oop) ifTrue:
 			[lastIndex := 64 min: ((objectMemory numBytesOf: oop) / objectMemory wordSize).
 			 lastIndex > 0 ifTrue:
 				[1 to: lastIndex do:
@@ -12999,13 +12993,55 @@ StackInterpreter >> quinaryInlinePrimitive: primIndex [
 ]
 
 { #category : #'image save/restore' }
-StackInterpreter >> readImageFromFile: f HeapSize: desiredHeapSize StartingAt: imageOffset [
+StackInterpreter >> readHeaderFrom: f startingAt: headerStart [
+
+	<var: #f type: #sqImageFile>
+	<var: #headerStart type: #'squeakFileOffsetType'>
+	<var: #header type: #'SpurImageHeaderStruct'>
+	<returnTypeC: #'SpurImageHeaderStruct'>
+
+	| header |
+	
+	self simulationOnly: [ header := SpurImageHeaderStruct new].
+
+	header swapBytes: (self checkImageVersionFrom: f).
+
+	header headerSize: (self getWord32FromFile: f swap: header swapBytes).
+	header dataSize: (self getLongFromFile: f swap: header swapBytes).
+	header oldBaseAddr: (self getLongFromFile: f swap: header swapBytes).
+	header initialSpecialObjectsOop: (self getLongFromFile: f swap: header swapBytes).
+	
+	header hdrLastHash: (self getLongFromFile: f swap: header swapBytes).	
+	
+	"savedWindowSize :=" self getLongFromFile: f swap: header swapBytes.
+	header headerFlags: (self getLongFromFile: f swap: header swapBytes).
+
+	header extraVMMemory: (self getWord32FromFile: f swap: header swapBytes).
+	header hdrNumStackPages: (self getShortFromFile: f swap: header swapBytes).
+	"This slot holds the size of the native method zone in 1k units. (pad to word boundary)."
+	header hdrCogCodeSize: ((self getShortFromFile: f swap: header swapBytes) * 1024).
+	header hdrEdenBytes: (self getWord32FromFile: f swap: header swapBytes).
+
+	header hdrMaxExtSemTabSize: (self getShortFromFile: f swap: header swapBytes).
+	"pad to word boundary.  This slot can be used for anything else that will fit in 16 bits.
+	 Preserve it to be polite to other VMs."
+	"the2ndUnknownShort :=" self getShortFromFile: f swap: header swapBytes.
+	header firstSegSize: (self getLongFromFile: f swap: header swapBytes).
+
+	header freeOldSpaceInImage:(self getLongFromFile: f swap: header swapBytes).
+
+	"position file after the header"
+	self sqImageFile: f Seek: headerStart + header headerSize.
+
+	^ header
+]
+
+{ #category : #'image save/restore' }
+StackInterpreter >> readImageFromFile: f StartingAt: headerStart [
+
 	"Read an image from the given file stream, allocating an amount of memory to its object heap.
 	
-	 V3: desiredHeapSize is the total size of the heap.  Fail if the image has an unknown format or
-	 requires more than the specified amount of memory.
-
-	 Spur: desiredHeapSize is ignored; this routine will attempt to provide at least extraVMMemory's
+	 This routine will attempt to provide at least extraVMMemory's
 	 ammount of free space after the image is loaded, taking any free space in teh image into account.
 	 extraVMMemory is stored in the image header and is accessible as vmParameterAt: 23.  If
 	 extraVMMemory is 0, the value defaults to the default grow headroom.  Fail if the image has an
@@ -13018,33 +13054,26 @@ StackInterpreter >> readImageFromFile: f HeapSize: desiredHeapSize StartingAt: i
 	 area could also be used to store an exec command on Unix systems, allowing one to launch
 	 Smalltalk by invoking the image name as a command."
 
-	| headerStart headerSize headerFlags dataSize oldBaseAddr swapBytes
-	  minimumMemory bytesRead bytesToShift heapSize firstSegSize
-	  hdrEdenBytes hdrMaxExtSemTabSize hdrNumStackPages allocationReserve |
 	<var: #f type: #sqImageFile>
+	<var: #headerStart type: #'squeakFileOffsetType'>
+
 	<var: #heapSize type: #usqInt>
-	<var: #dataSize type: #'size_t'>
 	<var: #minimumMemory type: #usqInt>
-	<var: #desiredHeapSize type: #usqInt>
 	<var: #allocationReserve type: #usqInt>
-	<var: #headerStart type: #squeakFileOffsetType>
-	<var: #imageOffset type: #squeakFileOffsetType>
+	<var: #header type: #'SpurImageHeaderStruct'>
 
-	metaclassNumSlots := 6.	"guess Metaclass instSize"
-	classNameIndex := 6.		"guess (Class instVarIndexFor: 'name' ifAbsent: []) - 1"
-	swapBytes := self checkImageVersionFrom: f startingAt: imageOffset.
-	headerStart := (self sqImageFilePosition: f) - 4.  "record header start position"
+	| header |
 
-	headerSize			:= self getWord32FromFile: f swap: swapBytes.
-	dataSize			:= self getLongFromFile: f swap: swapBytes.
-	oldBaseAddr		:= self getLongFromFile: f swap: swapBytes.
-	objectMemory specialObjectsOop: (self getLongFromFile: f swap: swapBytes).
-	objectMemory lastHash: (self getLongFromFile: f swap: swapBytes). "N.B.  not used."
-	savedWindowSize	:= self getLongFromFile: f swap: swapBytes.
-	headerFlags		:= self getLongFromFile: f swap: swapBytes.
-	self setImageHeaderFlagsFrom: headerFlags.
-	extraVMMemory	:= self getWord32FromFile: f swap: swapBytes.
-	hdrNumStackPages	:= self getShortFromFile: f swap: swapBytes.
+	metaclassNumSlots := 6. "guess Metaclass instSize"
+	classNameIndex := 6. "guess (Class instVarIndexFor: 'name' ifAbsent: []) - 1"
+
+	header := self readHeaderFrom: f startingAt: headerStart.
+
+	objectMemory specialObjectsOop: header initialSpecialObjectsOop.
+	objectMemory lastHash: header hdrLastHash.
+	self setImageHeaderFlagsFrom: header headerFlags.
+	extraVMMemory := header extraVMMemory.
+
 	"4 stack pages is small.  Should be able to run with as few as
 	 three. 4 should be comfortable but slow.  8 is a reasonable
 	 default.  Can be changed via vmParameterAt: 43 put: n.
@@ -13052,85 +13081,28 @@ StackInterpreter >> readImageFromFile: f HeapSize: desiredHeapSize StartingAt: i
 	 If desiredNumStackPages is already non-zero then it has been
 	 set as a preference.  Ignore (but preserve) the header's default."
 	numStackPages := desiredNumStackPages ~= 0
-						ifTrue: [desiredNumStackPages]
-						ifFalse: [hdrNumStackPages = 0
-									ifTrue: [self defaultNumStackPages]
-									ifFalse: [hdrNumStackPages]].
-	desiredNumStackPages := hdrNumStackPages.
-	"pad to word boundary.  This slot can be used for anything else that will fit in 16 bits.
-	 It is used for the cog code size in Cog.  Preserve it to be polite to other VMs."
-	theUnknownShort	:= self getShortFromFile: f swap: swapBytes.
-	hdrEdenBytes		:= self getWord32FromFile: f swap: swapBytes.
+		                 ifTrue: [ desiredNumStackPages ]
+		                 ifFalse: [ 
+			                 header hdrNumStackPages = 0
+				                 ifTrue: [ self defaultNumStackPages ]
+				                 ifFalse: [ header hdrNumStackPages ] ].
+	desiredNumStackPages := header hdrNumStackPages.
+
 	objectMemory edenBytes: (desiredEdenBytes ~= 0
-						ifTrue: [desiredEdenBytes]
-						ifFalse:
-							[hdrEdenBytes = 0
-									ifTrue: [objectMemory defaultEdenBytes]
-									ifFalse: [hdrEdenBytes]]).
-	desiredEdenBytes := hdrEdenBytes.
-	hdrMaxExtSemTabSize := self getShortFromFile: f swap: swapBytes.
-	hdrMaxExtSemTabSize ~= 0 ifTrue:
-		[self setMaxExtSemSizeTo: hdrMaxExtSemTabSize].
-	"pad to word boundary.  This slot can be used for anything else that will fit in 16 bits.
-	 Preserve it to be polite to other VMs."
-	the2ndUnknownShort	:= self getShortFromFile: f swap: swapBytes.
-	firstSegSize := self getLongFromFile: f swap: swapBytes.
-	objectMemory firstSegmentSize: firstSegSize.
-	"compare memory requirements with availability"
-	allocationReserve := self interpreterAllocationReserveBytes.
-	minimumMemory := dataSize
-						+ objectMemory newSpaceBytes
-						+ allocationReserve.
-	objectMemory hasSpurMemoryManagerAPI
-		ifTrue:
-			[| freeOldSpaceInImage headroom |
-			 freeOldSpaceInImage := self getLongFromFile: f swap: swapBytes.
-			 headroom := objectMemory
-							initialHeadroom: extraVMMemory
-							givenFreeOldSpaceInImage: freeOldSpaceInImage.
-			 heapSize := objectMemory roundUpHeapSize:
-						   dataSize
-						+ headroom
-						+ objectMemory newSpaceBytes
-						+ (headroom > allocationReserve
-							ifTrue: [0]
-							ifFalse: [allocationReserve])]
-		ifFalse:
-			[heapSize :=  desiredHeapSize
-						+ objectMemory newSpaceBytes
-						+ (desiredHeapSize - dataSize > allocationReserve
-							ifTrue: [0]
-							ifFalse: [allocationReserve]).
-			 heapSize < minimumMemory ifTrue:
-				[self insufficientMemorySpecifiedError]].
+			 ifTrue: [ desiredEdenBytes ]
+			 ifFalse: [ 
+				 header hdrEdenBytes = 0
+					 ifTrue: [ objectMemory defaultEdenBytes ]
+					 ifFalse: [ header hdrEdenBytes ] ]).
+	desiredEdenBytes := header hdrEdenBytes.
 
-	"allocate a contiguous block of memory for the Squeak heap"
-	objectMemory memory: (self
-								allocateMemory: heapSize
-								minimum: minimumMemory
-								imageFile: f
-								headerSize: headerSize
-								desiredPosition: oldBaseAddr) asUnsignedInteger.
-	objectMemory memory ifNil: [self insufficientMemoryAvailableError].
+	header hdrMaxExtSemTabSize ~= 0 ifTrue: [ 
+		self setMaxExtSemSizeTo: header hdrMaxExtSemTabSize ].
+	objectMemory firstSegmentSize: header firstSegSize.
 
-	objectMemory
-		setHeapBase: objectMemory memory
-		memoryLimit: objectMemory memory + heapSize
-		endOfMemory: objectMemory memory + dataSize.
+	self allocateMemoryForImage: f withHeader: header.
 
-	"position file after the header"
-	self sqImageFile: f Seek: headerStart + headerSize.
-
-	"read in the image in bulk, then swap the bytes if necessary"
-	bytesRead := objectMemory readHeapFromImageFile: f dataBytes: dataSize.
-	bytesRead ~= dataSize ifTrue: [self unableToReadImageError].
-
-	self ensureImageFormatIsUpToDate: swapBytes.
-
-	"compute difference between old and new memory base addresses"
-	bytesToShift := objectMemory memoryBaseForImageRead - oldBaseAddr.
-	self initializeInterpreter: bytesToShift.  "adjusts all oops to new location"
-	^dataSize
+	^ header dataSize
 ]
 
 { #category : #'image save/restore' }
@@ -13422,96 +13394,6 @@ StackInterpreter >> retryPrimitiveOnFailure [
 	^retried
 ]
 
-{ #category : #'callback support' }
-StackInterpreter >> returnAs: returnTypeOop ThroughCallback: vmCallbackContext Context: callbackMethodContext [
-	"callbackMethodContext is an activation of invokeCallback:[stack:registers:jmpbuf:].
-	 Its sender is the VM's state prior to the callback.  Reestablish that state (via longjmp),
-	 and mark callbackMethodContext as dead."
-	<export: true>
-	<var: #vmCallbackContext type: #'VMCallbackContext *'>
-	| calloutMethodContext theFP thePage |
-	<var: #theFP type: #'char *'>
-	<var: #thePage type: #'StackPage *'>
-	self assert: primFailCode = 0.
-	self assert: (objectMemory isIntegerObject: returnTypeOop).
-	self assert: (objectMemory isImmediate: vmCallbackContext asInteger) not.
-	self assert: ((objectMemory addressCouldBeObj: callbackMethodContext)
-				and: [objectMemory isContext: callbackMethodContext]).
-	self assert: (debugCallbackPath := 0) = 0.
-	((objectMemory isIntegerObject: returnTypeOop)
-	 and: [self isLiveContext: callbackMethodContext]) ifFalse:
-		[self assert: (debugCallbackPath := 1) = 1.
-		 ^false].
-	calloutMethodContext := self externalInstVar: SenderIndex ofContext: callbackMethodContext.
-	(self isLiveContext: calloutMethodContext) ifFalse:
-		[self assert: (debugCallbackPath := 2) = 2.
-		 ^false].
-	self assert: (debugCallbackReturns := debugCallbackReturns + 1) > 0.
-	"self assert: debugCallbackReturns < 3802."
-	"We're about to leave this stack page; must save the current frame's instructionPointer."
-	self push: instructionPointer.
-	self externalWriteBackHeadFramePointers.
-	"Mark callbackMethodContext as dead; the common case is that it is the current frame.
-	 We go the extra mile for the debugger."
-	(self isSingleContext: callbackMethodContext)
-		ifTrue:
-			[self assert: (debugCallbackPath := debugCallbackPath bitOr: 4) > 0.
-		 	 self markContextAsDead: callbackMethodContext]
-		ifFalse:
-			[self assert: (debugCallbackPath := debugCallbackPath bitOr: 8) > 0.
-		 	 theFP := self frameOfMarriedContext: callbackMethodContext.
-			 self assert: (self frameReceiver: theFP) = (objectMemory splObj: ClassAlien).
-			 framePointer = theFP "common case"
-				ifTrue:
-					[self assert: (debugCallbackPath := debugCallbackPath bitOr: 16) > 0.
-		 			 (self isBaseFrame: theFP) ifFalse: "calloutMethodContext is immediately below on the same page.  Make it current."
-						[self assert: (debugCallbackPath := debugCallbackPath bitOr: 32) > 0.
-		 				 instructionPointer := (self frameCallerSavedIP: theFP) asUnsignedInteger.
-						 stackPointer := theFP + (self frameStackedReceiverOffset: theFP) + objectMemory wordSize.
-						 framePointer := self frameCallerFP: theFP.
-						 self setMethod: (self frameMethodObject: framePointer).
-						 self restoreCStackStateForCallbackContext: vmCallbackContext.
-						 self assertValidExecutionPointe: instructionPointer r: framePointer s: stackPointer.
-						 "N.B. siglongjmp is defines as _longjmp on non-win32 platforms.
-						  This matches the use of _setjmp in ia32abicc.c."
-						 self siglong: vmCallbackContext trampoline jmp: (self integerValueOf: returnTypeOop).
-						 ^true].
-					 stackPages freeStackPage: stackPage]
-				ifFalse:
-					[self assert: (debugCallbackPath := debugCallbackPath bitOr: 64) > 0.
-		 			 self externalDivorceFrame: theFP andContext: callbackMethodContext.
-					 self markContextAsDead: callbackMethodContext]].
-	"Make the calloutMethodContext the active frame.  The case where calloutMethodContext
-	 is immediately below callbackMethodContext on the same page is handled above."
-	(self isStillMarriedContext: calloutMethodContext)
-		ifTrue:
-			[self assert: (debugCallbackPath := debugCallbackPath bitOr: 128) > 0.
-		 	 theFP := self frameOfMarriedContext: calloutMethodContext.
-			 thePage := stackPages stackPageFor: theFP.
-			 "findSPOf:on: points to the word beneath the instructionPointer, but
-			  there is no instructionPointer on the top frame of the current page."
-			 self assert: thePage ~= stackPage.
-			 stackPointer := thePage headFP = theFP
-								ifTrue: [thePage headSP]
-								ifFalse: [(self findSPOf: theFP on: thePage) - objectMemory wordSize].
-			 framePointer := theFP.
-			 self assert: stackPointer < framePointer]
-		ifFalse:
-			[self assert: (debugCallbackPath := debugCallbackPath bitOr: 256) > 0.
-		 	 thePage := self makeBaseFrameFor: calloutMethodContext.
-			 self setStackPointersFromPage: thePage].
-	instructionPointer := self popStack.
-	self setMethod: (objectMemory fetchPointer: MethodIndex ofObject: calloutMethodContext).
-	self setStackPageAndLimit: thePage.
-	self restoreCStackStateForCallbackContext: vmCallbackContext.
-	primitiveFunctionPointer := vmCallbackContext savedPrimFunctionPointer.
-	"N.B. siglongjmp is defined as _longjmp on non-win32 platforms.
-	  This matches the use of _setjmp in ia32abicc.c."
-	self siglong: vmCallbackContext trampoline jmp: (self integerValueOf: returnTypeOop).
-	"NOTREACHED"
-	^true
-]
-
 { #category : #'return bytecodes' }
 StackInterpreter >> returnFalse [
 	localReturnValue := objectMemory falseObject.
@@ -13723,84 +13605,6 @@ StackInterpreter >> sendBreakpoint: selector receiver: rcvr [
 	self sendBreak: (objectMemory firstFixedFieldOfMaybeImmediate: selector)
 		point: (objectMemory lengthOfMaybeImmediate: selector)
 		receiver: rcvr
-]
-
-{ #category : #'callback support' }
-StackInterpreter >> sendInvokeCallback: thunkPtr Stack: stackPtr Registers: regsPtr Jmpbuf: jmpBufPtr [
-	"Send the 4 argument callback message invokeCallback:stack:registers:jmpbuf:
-	 to Alien class with the supplied args.  The arguments are raw C addresses
-	 and are converted to integer objects on the way."
-	<export: true>
-	| classTag |
-	classTag := self fetchClassTagOfNonImm: (self splObj: ClassAlien).
-	messageSelector := self splObj: SelectorInvokeCallback.
-	argumentCount := 4.
-	(self lookupInMethodCacheSel: messageSelector classTag: classTag) ifFalse:
-	 	[(self lookupOrdinaryNoMNUEtcInClass: (objectMemory classForClassTag: classTag)) ~= 0 ifTrue:
-			[^false]].
-	((self argumentCountOf: newMethod) = 4
-	and: [primitiveFunctionPointer = 0]) ifFalse:
-		[^false].
-	self push: (self splObj: ClassAlien). "receiver"
-	self push: (self positiveMachineIntegerFor: thunkPtr).
-	self push: (self positiveMachineIntegerFor: stackPtr).
-	self push: (self positiveMachineIntegerFor: regsPtr).
-	self push: (self positiveMachineIntegerFor: jmpBufPtr).
-	self ifAppropriateCompileToNativeCode: newMethod selector: messageSelector.
-	self justActivateNewMethod: false. "either interpreted or machine code"
-	(self isMachineCodeFrame: framePointer) ifFalse:
-		[self maybeFlagMethodAsInterpreted: newMethod].
-	self checkForStackOverflow.
-	self enterSmalltalkExecutiveFromCallback.
-	"not reached"
-	^true
-]
-
-{ #category : #'callback support' }
-StackInterpreter >> sendInvokeCallbackContext: vmCallbackContext [
-	"Send the calllback message to Alien class with the supplied arg(s).  Use either the 1 arg
-	 invokeCallbackContext: or the 4 arg invokeCallback:stack:registers:jmpbuf: message,
-	 depending on what selector is installed in the specialObjectsArray. Note that if invoking the
-	 legacy invokeCallback:stack:registers:jmpbuf: we pass the vmCallbackContext as the jmpbuf
-	 argument (see reestablishContextPriorToCallback:). The arguments are raw C addresses and
-	 are converted to integer objects on the way. sendInvokeCallbackContext: &
-	 returnAs:ThroughCallback:Context: along with ownVM: and disownVM: conspire to save and
-	 restore newMethod, argumentCount and primitiveFunctionPointer around a callback.
-	 The VM depends on argumentCount being correct to cut-back the correct number of
-	 arguments on primitive return.  If a primitive that invokes a callback fails after invoking a
-	 callback (a bad idea, but s**t happens during development) then newMethod is required to
-	 activate the right faling method, and Spur expects primitiveFunctionPointer to be valid, so
-	 asserts will fail misleadingly if not."
-	<export: true>
-	<var: #vmCallbackContext type: #'VMCallbackContext *'>
-	| classTag |
-	vmCallbackContext savedPrimFunctionPointer: primitiveFunctionPointer.
-	classTag := self fetchClassTagOfNonImm: (objectMemory splObj: ClassAlien).
-	messageSelector := self splObj: SelectorInvokeCallback.
-	(self lookupInMethodCacheSel: messageSelector classTag: classTag) ifFalse:
-	 	[(self lookupOrdinaryNoMNUEtcInClass: (objectMemory classForClassTag: classTag)) ~= 0 ifTrue:
-			[^false]].
-	primitiveFunctionPointer ~= 0 ifTrue:
-		[primitiveFunctionPointer := vmCallbackContext savedPrimFunctionPointer.
-		 ^false].
-	self assert: (debugCallbackInvokes := debugCallbackInvokes + 1) > 0.
-	"self assert: debugCallbackInvokes < 3802."
-	self saveCStackStateForCallbackContext: vmCallbackContext.
-	self push: (objectMemory splObj: ClassAlien). "receiver"
-	(self argumentCountOf: newMethod) = 4 ifTrue:
-		[self push: (self positiveMachineIntegerFor: vmCallbackContext thunkp asUnsignedInteger).
-		 self push: (self positiveMachineIntegerFor: vmCallbackContext stackp asUnsignedInteger).
-		 self push: (self positiveMachineIntegerFor: vmCallbackContext intregargsp asUnsignedInteger)].
-	self push: (self positiveMachineIntegerFor: vmCallbackContext asUnsignedInteger).
-	self ifAppropriateCompileToNativeCode: newMethod selector: messageSelector.
-	self justActivateNewMethod: false. "either interpreted or machine code"
-	(self isMachineCodeFrame: framePointer) ifFalse:
-		[self maybeFlagMethodAsInterpreted: newMethod].
-	self checkForStackOverflow.
-	self assert: (self frameReceiver: framePointer) = (objectMemory splObj: ClassAlien).
-	self enterSmalltalkExecutiveFromCallback.
-	"not reached"
-	^true
 ]
 
 { #category : #'send bytecodes' }
@@ -14659,8 +14463,7 @@ StackInterpreter >> slowPrimitiveResponse [
 { #category : #'image save/restore' }
 StackInterpreter >> snapshot: embedded [ 
 	"update state of active context"
-	| activeContext activeProc rcvr setMacType stackIndex |
-	<var: #setMacType type: #'void *'>
+	| activeContext activeProc rcvr stackIndex |
 
 	"For now the stack munging below doesn't deal with more than one argument.
 	 It can, and should."
@@ -14679,10 +14482,14 @@ StackInterpreter >> snapshot: embedded [
 		withValue: activeContext.
 
 	tempOop := activeContext.
+
+	self logDebug: 'Garbage Collect for Snapshot'.
+
 	objectMemory garbageCollectForSnapshot.
 	"Nothing moves from here on so it is safe to grab the activeContext again."
 	activeContext := tempOop.
 	tempOop := 0.
+
 
 	self successful ifTrue:
 		["Without contexts or stacks simulate
@@ -14695,13 +14502,8 @@ StackInterpreter >> snapshot: embedded [
 			storePointerUnchecked: stackIndex + CtxtTempFrameStart - 1
 			ofObject: activeContext
 			withValue: objectMemory trueObject.
-		"now attempt to write the snapshot file"
+		"now attempt to write the snapshot file"		
 		self writeImageFileIO.
-		(self successful and: [embedded not]) ifTrue:
-			["set Mac file type and creator; this is a noop on other platforms"
-			setMacType := self ioLoadFunction: 'setMacFileTypeAndCreator' From: 'FilePlugin'.
-			setMacType = 0 ifFalse:
-				[self cCode: '((sqInt (*)(char *, char *, char *))setMacType)(imageName, "STim", "FAST")']].
 		"Without contexts or stacks simulate
 			self pop: 1"
 		objectMemory
@@ -15442,6 +15244,12 @@ StackInterpreter >> temporaryLocation: offset in: theFP numArgs: numArgs [
 StackInterpreter >> thisClassIndex [
 	<doNotGenerate>
 	^thisClassIndex
+]
+
+{ #category : #simulation }
+StackInterpreter >> time: aString [ 
+	<doNotGenerate>
+	^ 0
 ]
 
 { #category : #'object memory support' }
@@ -16230,17 +16038,12 @@ StackInterpreter >> writeImageFileIO [
 	<var: #imageName declareC: 'extern char imageName[]'>
 
 	self cCode: [] inSmalltalk: [imageName := 'sooth compiler'. ^self writeImageFileIOSimulation].
-
-	"If the security plugin can be loaded, use it to check for write permission.
-	 If not, assume it's ok"
-	sCWIfn := self ioLoadFunction: 'secCanWriteImage' From: 'SecurityPlugin'.
-	sCWIfn ~= 0 ifTrue:
-		[okToWrite := self cCode: '((sqInt (*)(void))sCWIfn)()'.
-		 okToWrite ifFalse:[^self primitiveFail]].
 	
 	"local constants"
 	headerStart := 0.  
 	headerSize := objectMemory wordSize = 4 ifTrue: [64] ifFalse: [128].  "header size in bytes; do not change!"
+
+	self logDebug: 'Writing snapshot file %s' _: imageName.
 
 	f := self sqImageFile: imageName Open: 'wb'.
 	f = nil ifTrue: "could not open the image file for writing"
@@ -16295,7 +16098,9 @@ StackInterpreter >> writeImageFileIO [
 								File: imageBytes
 								Write: f].
 	self success: bytesWritten = imageBytes.
-	self sqImageFileClose: f
+	self sqImageFileClose: f.
+	
+	self logDebug: 'Snapshot file %s done' _: imageName.
 ]
 
 { #category : #'image save/restore' }
